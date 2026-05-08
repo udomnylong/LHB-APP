@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+<meta charset="UTF-8">
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <!-- iOS PWA Support -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LHB HR">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0d9e6e">
+  <!-- iOS Icons (inline SVG as base64) -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%230d9e6e'/><text x='90' y='125' font-size='100' text-anchor='middle'>🏢</text></svg>">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>HR - Scan វត្តមាន</title>
+<link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<meta name="google-signin-client_id" content="861392442268-99j9agbu8e99rkalso0b4dc2ld8on69k.apps.googleusercontent.com">
+<style>
+:root{
+  --primary:#1a3c5e;--success:#10b981;--danger:#ef4444;
+  --warn:#f59e0b;--bg:#f0f4f8;--border:#e2e8f0;
+  --text:#1e293b;--text2:#64748b;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Kantumruy Pro',sans-serif;background:var(--bg);min-height:100vh;}
+.hdr{padding:20px 24px;text-align:center;color:#fff;}
+.hdr h1{font-size:20px;font-weight:700;}
+.hdr p{font-size:13px;opacity:.85;margin-top:4px;}
+.card{background:#fff;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.12);width:94%;max-width:460px;margin:16px auto;padding:24px;}
+.steps{display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:20px;}
+.step{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);}
+.step.active{color:var(--primary);font-weight:700;}
+.step.done{color:var(--success);}
+.sn{width:26px;height:26px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
+.step.active .sn{background:var(--primary);color:#fff;}
+.step.done .sn{background:var(--success);color:#fff;}
+.sl{width:28px;height:2px;background:var(--border);}
+.clock-box{text-align:center;padding:16px;background:#f8faff;border-radius:12px;margin-bottom:16px;}
+.clk{font-size:46px;font-weight:700;color:var(--primary);letter-spacing:3px;}
+.dt{font-size:13px;color:var(--text2);margin-top:4px;}
+.proj-box{background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:none;}
+.proj-box h3{font-size:15px;font-weight:700;color:var(--primary);}
+.proj-box p{font-size:12px;color:var(--text2);margin-top:4px;}
+.tbadge{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;margin-top:8px;}
+
+/* ===== GOOGLE AUTH BOX ===== */
+.auth-box{border-radius:16px;padding:20px;margin-bottom:16px;background:#fff;border:2px solid var(--border);}
+.auth-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+/* Google One Tap container */
+#g_id_onload_area{display:flex;justify-content:center;margin-bottom:12px;}
+/* Custom Google Button */
+.btn-google-signin{width:100%;padding:13px 16px;border:2px solid #dadce0;border-radius:12px;background:#fff;font-family:'Kantumruy Pro',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px;transition:.2s;color:#3c4043;}
+.btn-google-signin:hover{background:#f8f9fa;border-color:#4285f4;box-shadow:0 2px 8px rgba(66,133,244,.2);}
+.btn-google-signin:active{background:#f1f3f4;}
+.google-icon{width:20px;height:20px;flex-shrink:0;}
+
+/* Auth Status Cards */
+.auth-status{border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-top:12px;}
+.auth-status.pending{background:#f8faff;border:1.5px dashed var(--border);}
+.auth-status.verifying{background:#fef3c7;border:1.5px solid #fcd34d;}
+.auth-status.success{background:#d1fae5;border:1.5px solid #6ee7b7;}
+.auth-status.error{background:#fee2e2;border:1.5px solid #fca5a5;}
+.auth-avatar{width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;}
+.auth-avatar-ph{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#1a3c5e,#2563a8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;flex-shrink:0;}
+.auth-info .name{font-size:14px;font-weight:700;color:var(--text);}
+.auth-info .email{font-size:12px;color:var(--text2);margin-top:2px;}
+.auth-info .status-lbl{font-size:12px;font-weight:600;margin-top:4px;}
+.status-lbl.ok{color:#065f46;}
+.status-lbl.err{color:#991b1b;}
+.status-lbl.wait{color:#92400e;}
+
+/* Manual Gmail fallback */
+.manual-toggle{text-align:center;margin-top:12px;}
+.manual-toggle button{background:none;border:none;color:var(--text2);font-size:12px;font-family:'Kantumruy Pro',sans-serif;cursor:pointer;text-decoration:underline;}
+.manual-box{margin-top:12px;display:none;}
+.gmail-input{width:100%;padding:12px 14px;border:2px solid var(--border);border-radius:10px;font-family:'Kantumruy Pro',sans-serif;font-size:14px;color:var(--text);transition:.2s;}
+.gmail-input:focus{outline:none;border-color:#4285f4;}
+.btn-verify-manual{width:100%;margin-top:8px;padding:12px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-family:'Kantumruy Pro',sans-serif;font-size:14px;font-weight:700;cursor:pointer;}
+
+/* GPS */
+.gps-box{background:#f8faff;border-radius:12px;padding:14px;margin-bottom:16px;display:none;}
+.gps-row{display:flex;align-items:center;justify-content:space-between;}
+.gdot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;flex-shrink:0;}
+.gdot.s{background:var(--warn);animation:pulse 1s infinite;}
+.gdot.ok{background:var(--success);}
+.gdot.err{background:var(--danger);}
+.gdot.warn{background:var(--warn);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+.dist-bar{margin-top:10px;}
+.bar-bg{height:8px;background:var(--border);border-radius:4px;margin-top:4px;}
+.bar-fill{height:8px;border-radius:4px;transition:.5s;}
+
+/* ACTION */
+.btn-act{width:100%;padding:16px;border:none;border-radius:14px;font-family:'Kantumruy Pro',sans-serif;font-size:17px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;transition:.2s;}
+.btn-act:hover:not(:disabled){transform:translateY(-2px);}
+.btn-act:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+.btn-ci{background:linear-gradient(135deg,#059669,#10b981);color:#fff;box-shadow:0 4px 20px rgba(16,185,129,.3);}
+.btn-co{background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;box-shadow:0 4px 20px rgba(245,158,11,.3);}
+
+/* RESULT */
+.res{border-radius:16px;padding:24px;text-align:center;display:none;}
+.res.ok{background:#d1fae5;border:1.5px solid #6ee7b7;}
+.res .ico{font-size:52px;margin-bottom:12px;}
+.res .tit{font-size:20px;font-weight:700;color:var(--primary);margin-bottom:6px;}
+.res .rtm{font-size:42px;font-weight:700;margin:8px 0;}
+.res .det{font-size:13px;color:var(--text2);line-height:1.8;}
+.late-badge{display:inline-block;padding:5px 16px;border-radius:20px;font-size:13px;font-weight:700;margin-top:6px;}
+.btn-again{margin-top:16px;padding:12px 28px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-family:'Kantumruy Pro',sans-serif;font-size:14px;cursor:pointer;font-weight:600;}
+
+/* HISTORY */
+.hist{margin-top:20px;border-top:1px solid var(--border);padding-top:16px;}
+.hist h4{font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px;}
+.hi{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg);border-radius:10px;margin-bottom:6px;font-size:12px;}
+
+/* MSG */
+.msg-box{border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:none;align-items:center;gap:8px;}
+.msg-box.show{display:flex;}
+.msg-box.warn{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;}
+.msg-box.err{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;}
+
+.ob{background:#fef3c7;padding:8px 16px;text-align:center;font-size:12px;color:#92400e;display:none;}
+.ob.show{display:block;}
+.err-pg{text-align:center;padding:40px 24px;}
+
+/* Security banner */
+.sec-banner{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:12px;color:#166534;}
+.sec-banner i{font-size:20px;color:#059669;flex-shrink:0;}
+</style>
+</head>
+<body>
+
+<div class="ob" id="ob"><i class="fas fa-wifi"></i> Offline Mode</div>
+
+<div class="hdr" id="hdr" style="background:linear-gradient(135deg,#065f46,#10b981);">
+  <h1><i class="fas fa-fingerprint"></i> HR វត្តមាន</h1>
+  <p id="hsub">កំពុងផ្ទុក...</p>
+</div>
+
+<div class="card" id="mc">
+  <!-- STEPS -->
+  <div class="steps">
+    <div class="step done" id="s1"><div class="sn"><i class="fas fa-check" style="font-size:9px;"></i></div>QR</div>
+    <div class="sl"></div>
+    <div class="step active" id="s2"><div class="sn">2</div>Verify</div>
+    <div class="sl"></div>
+    <div class="step" id="s3"><div class="sn">3</div>GPS</div>
+    <div class="sl"></div>
+    <div class="step" id="s4"><div class="sn">4</div>រួចរាល់</div>
+  </div>
+
+  <!-- CLOCK -->
+  <div class="clock-box">
+    <div class="clk" id="clk">--:--:--</div>
+    <div class="dt" id="dt"></div>
+  </div>
+
+  <!-- PROJECT INFO -->
+  <div class="proj-box" id="projBox">
+    <h3 id="projName">-</h3>
+    <p id="projMeta">-</p>
+    <div id="projBadge"></div>
+  </div>
+
+  <!-- SECURITY BANNER -->
+  <div class="sec-banner">
+    <i class="fas fa-shield-alt"></i>
+    <div>
+      <strong>🔐 Verify ដោយ Gmail ឬ OTP — 1 Staff = 1 Account</strong><br>
+      <span style="opacity:.8;">ជ្រើស Gmail Sign In ឬ Phone + Telegram OTP</span>
+    </div>
+  </div>
+
+  <!-- MSG -->
+  <div class="msg-box" id="msgBox"><i class="fas fa-exclamation-circle"></i><span id="msgTxt"></span></div>
+
+  <!-- AUTH BOX -->
+  <div class="auth-box" id="authBox">
+    <div class="auth-title">
+      <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/></svg>
+      Sign In ជាមួយ Google Gmail
+    </div>
+
+    <!-- Google One Tap Div (auto shows if logged in) -->
+    <div id="g_id_onload"
+      data-client_id="861392442268-99j9agbu8e99rkalso0b4dc2ld8on69k.apps.googleusercontent.com"
+      data-context="signin"
+      data-ux_mode="popup"
+      data-callback="onGoogleSignIn"
+      data-auto_select="true"
+      data-itp_support="true">
+    </div>
+
+    <!-- Google Sign In Button (renders automatically) -->
+    <div id="g_id_signin_btn" style="display:flex;justify-content:center;margin-bottom:12px;">
+      <div class="g_id_signin"
+        data-type="standard"
+        data-shape="rectangular"
+        data-theme="outline"
+        data-text="signin_with"
+        data-size="large"
+        data-logo_alignment="left"
+        data-width="380">
+      </div>
+    </div>
+
+    <!-- Custom fallback button -->
+    <button class="btn-google-signin" id="btnGoogleFallback" onclick="startGoogleAuth()">
+      <svg class="google-icon" viewBox="0 0 48 48"><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/></svg>
+      Sign in ជាមួយ Google Account
+    </button>
+
+    <!-- Auth Status Display -->
+    <div class="auth-status pending" id="authStatus">
+      <div class="auth-avatar-ph"><i class="fas fa-user"></i></div>
+      <div class="auth-info">
+        <div class="name">មិនទាន់ Sign In</div>
+        <div class="email">ចុច Sign in ខាងលើ</div>
+      </div>
+    </div>
+
+    <!-- Manual Gmail Input (fallback) -->
+    <div class="manual-toggle">
+      <button onclick="toggleManual()">⌨️ បញ្ចូល Gmail ដោយដៃ</button>
+    </div>
+    <div class="manual-box" id="manualBox">
+      <input type="email" id="gmailManual" class="gmail-input" placeholder="yourname@gmail.com"
+        onkeydown="if(event.key==='Enter')doManualVerify()">
+      <button class="btn-verify-manual" onclick="doManualVerify()">
+        <i class="fas fa-check-circle"></i> បញ្ជាក់ Gmail
+      </button>
+    </div>
+
+    <!-- Divider -->
+    <div style="display:flex;align-items:center;gap:10px;margin:14px 0;">
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+      <span style="font-size:12px;color:var(--text2);">ឬ</span>
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+    </div>
+
+    <!-- Telegram OTP Method -->
+    <div id="otpSection">
+      <div style="text-align:center;margin-bottom:10px;">
+        <span style="font-size:12px;color:var(--text2);">📱 ផ្ទៀងផ្ទាត់ដោយ Telegram OTP</span>
+      </div>
+      <!-- Phone input -->
+      <div id="otpPhasePhone">
+        <div style="position:relative;margin-bottom:8px;">
+          <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text2);">+855</span>
+          <input type="tel" id="otpPhone" placeholder="0XX-XX-XX-XX"
+            style="width:100%;padding:12px 12px 12px 52px;border:2px solid var(--border);border-radius:10px;font-family:var(--font-km);font-size:14px;"
+            oninput="formatOtpPhone(this)" onkeydown="if(event.key==='Enter')requestOTP()">
+        </div>
+        <button onclick="requestOTP()" id="btnSendOTP"
+          style="width:100%;padding:13px;border:none;border-radius:10px;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;font-family:var(--font-km);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <i class="fab fa-telegram"></i> ទទួល OTP តាម Telegram
+        </button>
+        <p style="font-size:10px;color:var(--text2);text-align:center;margin-top:6px;">
+          ⚠️ ត្រូវ Join <strong>LHB HR Bot</strong> ក្នុង Telegram ជាមុន
+        </p>
+      </div>
+
+      <!-- OTP input (shown after send) -->
+      <div id="otpPhaseCode" style="display:none;">
+        <div style="text-align:center;margin-bottom:10px;">
+          <i class="fab fa-telegram" style="font-size:24px;color:#0088cc;"></i>
+          <p style="font-size:13px;font-weight:600;margin-top:6px;" id="otpSentMsg">OTP sent to Telegram</p>
+          <p style="font-size:11px;color:var(--text2);" id="otpCountdown">⏳ Expire ក្នុង 5:00</p>
+        </div>
+        <!-- 6 digit boxes -->
+        <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px;" id="otpBoxes">
+          <input type="number" class="otp-box" oninput="otpInput(this,0)" onkeydown="otpKey(event,0)" maxlength="1" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:2px solid var(--border);border-radius:10px;font-family:var(--font-km);">
+          <input type="number" class="otp-box" oninput="otpInput(this,1)" onkeydown="otpKey(event,1)" maxlength="1" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:2px solid var(--border);border-radius:10px;font-family:var(--font-km);">
+          <input type="number" class="otp-box" oninput="otpInput(this,2)" onkeydown="otpKey(event,2)" maxlength="1" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:2px solid var(--border);border-radius:10px;font-family:var(--font-km);">
+          <input type="number" class="otp-box" oninput="otpInput(this,3)" onkeydown="otpKey(event,3)" maxlength="1" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:2px solid var(--border);border-radius:10px;font-family:var(--font-km);">
+          <input type="number" class="otp-box" oninput="otpInput(this,4)" onkeydown="otpKey(event,4)" maxlength="1" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:2px solid var(--border);border-radius:10px;font-family:var(--font-km);">
+          <input type="number" class="otp-box" oninput="otpInput(this,5)" onkeydown="otpKey(event,5)" maxlength="1" style="width:44px;height:52px;text-align:center;font-size:22px;font-weight:700;border:2px solid var(--border);border-radius:10px;font-family:var(--font-km);">
+        </div>
+        <button onclick="verifyOTP()" id="btnVerifyOTP"
+          style="width:100%;padding:13px;border:none;border-radius:10px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-family:var(--font-km);font-size:14px;font-weight:700;cursor:pointer;">
+          <i class="fas fa-check-circle"></i> ផ្ទៀងផ្ទាត់ OTP
+        </button>
+        <div style="text-align:center;margin-top:8px;">
+          <button onclick="backToPhone()" style="background:none;border:none;color:var(--text2);font-family:var(--font-km);font-size:12px;cursor:pointer;">← វាយ​ Phone ម្ដងទៀត</button>
+          <span style="color:var(--border);margin:0 8px;">|</span>
+          <button onclick="requestOTP()" id="btnResend" style="background:none;border:none;color:#0088cc;font-family:var(--font-km);font-size:12px;cursor:pointer;display:none;">🔄 ផ្ញើម្ដងទៀត</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GPS -->
+  <div class="gps-box" id="gpsBox">
+    <div class="gps-row">
+      <span style="display:flex;align-items:center;font-size:13px;">
+        <span class="gdot s" id="gdot"></span>
+        <span id="gpsText">ស្វែងរក GPS...</span>
+      </span>
+      <span id="gpsAcc" style="font-size:11px;color:var(--text2);"></span>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-top:4px;" id="gpsDet"></div>
+    <div class="dist-bar" id="distBar" style="display:none;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:6px;">
+        <span id="distTxt"></span><span id="radiusTxt"></span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" id="barFill" style="width:0;background:var(--success);"></div></div>
+    </div>
+  </div>
+
+  <!-- ACTION BUTTON -->
+  <button class="btn-act btn-ci" id="actBtn" onclick="doSubmit()" disabled>
+    <i class="fas fa-spinner fa-spin" id="actIco"></i>
+    <span id="actTxt">Sign In Gmail ជាមុន</span>
+  </button>
+
+  <!-- RESULT -->
+  <div class="res" id="resBox">
+    <div class="ico" id="resIco"></div>
+    <div class="tit" id="resTit"></div>
+    <div class="rtm" id="resTm"></div>
+    <div class="det" id="resDet"></div>
+    <button class="btn-again" onclick="doReset()"><i class="fas fa-redo"></i> Scan ម្ដងទៀត</button>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="hist">
+    <h4><i class="fas fa-history" style="margin-right:6px;"></i>ថ្ងៃនេះ</h4>
+    <div id="histList"></div>
+  </div>
+</div>
+
+<!-- ERROR CARD -->
+<div class="card" id="errCard" style="display:none;">
+  <div class="err-pg">
+    <i class="fas fa-exclamation-triangle" style="font-size:48px;color:var(--danger);display:block;margin-bottom:16px;"></i>
+    <h2 style="font-size:18px;font-weight:700;color:var(--primary);margin-bottom:8px;">QR Code មិនត្រឹមត្រូវ</h2>
+    <p style="font-size:14px;color:var(--text2);">សូម Scan QR Code ពី HR System ម្ដងទៀត</p>
+  </div>
+</div>
+
+<script>
+// ============ CONFIG ============
+const SU = 'https://script.google.com/macros/s/AKfycbxrvFJF-DlXx1Bto9OUhA079POrqK9St-gnFpY5HQnWZkfhFr6l_wyo0ag0VhPmVz2W/exec';
+// ============================================================
+// DEPARTMENT TIME ROLES
+// ============================================================
+const DEPT_ROLES = [
+  {
+    name: 'Site/Stock/Production',
+    depts: ['site','construction','stock','production','site construction'],
+    checkIn:  '07:00', checkOut: '17:00',
+    lateGrace: 0, earlyGrace: 10
+  },
+  {
+    name: 'Security/Cleaner/Cook',
+    depts: ['security','cleaner','cook','cleaning','guard'],
+    checkIn:  '06:00', checkOut: '18:00',
+    lateGrace: 0, earlyGrace: 10
+  },
+  {
+    name: 'Office/Default',
+    depts: [], // catch-all
+    checkIn:  '08:00', checkOut: '17:00',
+    lateGrace: 0, earlyGrace: 10
+  }
+];
+
+function getDeptRole(dept) {
+  const d = (dept||'').toLowerCase().trim();
+  for (const role of DEPT_ROLES) {
+    if (role.depts.length === 0) continue; // skip catch-all for now
+    for (const key of role.depts) {
+      if (d.includes(key)) return role;
+    }
+  }
+  return DEPT_ROLES[DEPT_ROLES.length - 1]; // Office/Default
+}
+
+// Legacy constants (used as fallback)
+const WSTART = '08:00', WEND = '17:00', LGRACE = 0, EGRACE = 10;
+
+// ============ STATE ============
+let QD = null, gps = null, staff = [], user = null, matched = null, busy = false;
+const pad = v => String(v).padStart(2,'0');
+
+// ============ CLOCK — Starts IMMEDIATELY ============
+(function startClock(){
+  function tick(){
+    const n = new Date();
+    const ce = document.getElementById('clk');
+    const de = document.getElementById('dt');
+    if(ce) ce.textContent = pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());
+    if(de) de.textContent = n.toLocaleDateString('km-KH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+
+// ============================================================
+// TELEGRAM OTP FUNCTIONS
+// ============================================================
+let _otpPhone = '', _otpTimer = null;
+
+function formatOtpPhone(inp) {
+  let d = inp.value.replace(/[^0-9]/g,'').slice(0,10);
+  if      (d.length > 7) inp.value = d.slice(0,3)+'-'+d.slice(3,5)+'-'+d.slice(5,7)+'-'+d.slice(7);
+  else if (d.length > 5) inp.value = d.slice(0,3)+'-'+d.slice(3,5)+'-'+d.slice(5);
+  else if (d.length > 3) inp.value = d.slice(0,3)+'-'+d.slice(3);
+  else inp.value = d;
+}
+
+async function requestOTP() {
+  const raw = document.getElementById('otpPhone').value.replace(/[^0-9]/g,'');
+  if (raw.length < 9) {
+    document.getElementById('otpPhone').style.borderColor='#ef4444'; return;
+  }
+  _otpPhone = raw;
+  document.getElementById('otpPhone').style.borderColor='var(--border)';
+  const btn = document.getElementById('btnSendOTP');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> កំពុងផ្ញើ...';
+  try {
+    const r = await fetch(SU, {
+      method:'POST', mode:'cors', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ action:'sendOTP', phone: raw })
+    });
+    const j = await r.json();
+    if (j.status === 'ok') {
+      document.getElementById('otpPhasePhone').style.display = 'none';
+      document.getElementById('otpPhaseCode').style.display  = 'block';
+      document.getElementById('otpSentMsg').textContent = 'OTP ផ្ញើទៅ Telegram: 0'+raw;
+      document.querySelectorAll('.otp-box')[0].focus();
+      startOtpTimer(300);
+    } else {
+      showMsg('⚠️ '+(j.msg||'Phone មិននៅក្នុង System — ទាក់ទង Admin'), 'err');
+    }
+  } catch(e) { showMsg('error','❌ Error: '+e.message); }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fab fa-telegram"></i> ទទួល OTP តាម Telegram';
+}
+
+function otpInput(inp, idx) {
+  inp.value = inp.value.replace(/[^0-9]/g,'').slice(-1);
+  if (inp.value && idx < 5) document.querySelectorAll('.otp-box')[idx+1].focus();
+  const all = [...document.querySelectorAll('.otp-box')].map(b=>b.value).join('');
+  if (all.length === 6) verifyOTP();
+}
+
+function otpKey(evt, idx) {
+  if (evt.key==='Backspace' && !evt.target.value && idx > 0)
+    document.querySelectorAll('.otp-box')[idx-1].focus();
+}
+
+async function verifyOTP() {
+  const code = [...document.querySelectorAll('.otp-box')].map(b=>b.value).join('');
+  if (code.length < 6) return;
+  const btn = document.getElementById('btnVerifyOTP');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ពិនិត្យ...';
+  try {
+    const r = await fetch(SU, {
+      method:'POST', mode:'cors', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ action:'verifyOTP', phone:_otpPhone, code:code })
+    });
+    const j = await r.json();
+    if (j.status === 'ok' && j.staff) {
+      clearInterval(_otpTimer);
+      matched = j.staff;
+      user = { email: j.staff.Gmail || ('0'+_otpPhone), name: j.staff.Name, picture: null };
+      sessionStorage.setItem('hr_gu', JSON.stringify(user));
+      // Show staff info in auth status
+      showAuthStatus('success', j.staff.Name + ' (' + j.staff.ID + ')', user.email, null);
+      hideMsg();
+      afterVerified(); // proceed to GPS → Check In/Out
+    } else {
+      showMsg('❌ OTP '+(j.msg||'មិនត្រឹមត្រូវ'), 'err');
+      [...document.querySelectorAll('.otp-box')].forEach(b => { b.value=''; b.style.borderColor='#ef4444'; });
+      document.querySelectorAll('.otp-box')[0].focus();
+    }
+  } catch(e) { showMsg('error','❌ '+e.message); }
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-check-circle"></i> ផ្ទៀងផ្ទាត់ OTP';
+}
+
+function startOtpTimer(sec) {
+  let s = sec; clearInterval(_otpTimer);
+  const el = document.getElementById('otpCountdown');
+  const resend = document.getElementById('btnResend');
+  _otpTimer = setInterval(() => {
+    s--;
+    const m = Math.floor(s/60), ss = s%60;
+    if(el) el.textContent = '⏳ Expire ក្នុង '+m+':'+(ss<10?'0':'')+ss;
+    if(s <= 0) { clearInterval(_otpTimer); if(el) el.textContent='❌ Expired'; if(resend) resend.style.display='inline'; }
+    if(s === 240 && resend) resend.style.display='inline';
+  }, 1000);
+}
+
+function backToPhone() {
+  clearInterval(_otpTimer);
+  document.getElementById('otpPhasePhone').style.display = 'block';
+  document.getElementById('otpPhaseCode').style.display  = 'none';
+  [...document.querySelectorAll('.otp-box')].forEach(b => { b.value=''; b.style.borderColor='var(--border)'; });
+}
+
+// ============ INIT ============
+document.addEventListener('DOMContentLoaded', () => {
+  parseQR();
+  if(!navigator.onLine) document.getElementById('ob').classList.add('show');
+  window.addEventListener('offline', ()=>document.getElementById('ob').classList.add('show'));
+  window.addEventListener('online',  ()=>document.getElementById('ob').classList.remove('show'));
+  loadStaffCache();
+  loadHist();
+  restoreSession();
+});
+
+// ============ PARSE QR ============
+function parseQR(){
+  const raw = new URLSearchParams(window.location.search).get('d');
+  if(!raw){ showErr(); return; }
+  try{
+    QD = JSON.parse(decodeURIComponent(raw));
+    if(!QD.project||!QD.type) throw 0;
+    initUI();
+  }catch(e){ showErr(); }
+}
+
+function initUI(){
+  const ci = QD.type === 'checkin';
+  document.getElementById('hdr').style.background = ci
+    ? 'linear-gradient(135deg,#065f46,#10b981)'
+    : 'linear-gradient(135deg,#92400e,#d97706)';
+  document.getElementById('hsub').textContent = (ci?'🟢 Check In':'🟡 Check Out')+' — '+QD.project;
+  document.getElementById('projName').textContent = QD.project;
+  document.getElementById('projMeta').innerHTML = '<i class="fas fa-map-marker-alt" style="margin-right:4px;color:#2563a8;"></i>'+(QD.location||'គ្មានទីតាំង')+' | Radius: '+(QD.radius||'?')+'m';
+  document.getElementById('projBadge').innerHTML = '<span class="tbadge" style="background:'+(ci?'#d1fae5;color:#065f46':'#fef3c7;color:#92400e')+'"><i class="fas fa-'+(ci?'sign-in-alt':'sign-out-alt')+'"></i> '+(ci?'Check In':'Check Out')+'</span>';
+  document.getElementById('projBox').style.display = 'block';
+  const btn = document.getElementById('actBtn');
+  btn.className = 'btn-act '+(ci?'btn-ci':'btn-co');
+  loadStaffFromSheet();
+}
+
+function showErr(){
+  document.getElementById('mc').style.display = 'none';
+  document.getElementById('errCard').style.display = 'block';
+}
+
+// ============ STAFF LOAD ============
+function loadStaffCache(){
+  const c = localStorage.getItem('hr_sc');
+  if(c){ try{ staff = JSON.parse(c); }catch(e){} }
+}
+
+async function loadStaffFromSheet(){
+  try{
+    const ctrl = new AbortController();
+    setTimeout(()=>ctrl.abort(), 10000);
+    // Explicit sheet=StaffInfo to avoid 'undefined' param
+    const url = SU + '?sheet=StaffInfo&t=' + Date.now();
+    const r = await fetch(url, {redirect:'follow', signal:ctrl.signal});
+    const txt = await r.text();
+    const j = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
+    if(j.status==='ok' && j.data && j.data.length){
+      staff = j.data;
+      localStorage.setItem('hr_sc', JSON.stringify(staff));
+      if(user) verifyGmail(user.email); // Re-verify after load
+    }
+  }catch(e){ console.warn('[HR] Staff load:', e.message); }
+}
+
+// ============ GOOGLE SIGN IN CALLBACK ============
+// Called automatically by Google Identity Services when user signs in
+function onGoogleSignIn(response){
+  // Decode JWT token to get user info
+  try{
+    const payload = JSON.parse(atob(response.credential.split('.')[1]));
+    const email = payload.email.toLowerCase().trim();
+    const name  = payload.name || email.split('@')[0];
+    const pic   = payload.picture || null;
+    user = { email, name, picture: pic };
+    sessionStorage.setItem('hr_gu', JSON.stringify(user));
+    showAuthStatus('verifying', name, email, pic);
+    setTimeout(() => verifyGmail(email), 800);
+  }catch(e){
+    showMsg('❌ Google Sign In Error — ព្យាយាមម្ដងទៀត', 'err');
+  }
+}
+
+// Fallback: trigger Google Auth popup manually
+function startGoogleAuth(){
+  if(typeof google !== 'undefined' && google.accounts){
+    google.accounts.id.prompt(); // Show One Tap
+  } else {
+    // Google GSI not loaded — show manual
+    document.getElementById('manualBox').style.display = 'block';
+    showMsg('⚠️ Google Sign In មិន Load — សូម Sign In ដោយដៃ', 'warn');
+  }
+}
+
+// ============ MANUAL GMAIL FALLBACK ============
+function toggleManual(){
+  const box = document.getElementById('manualBox');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  if(box.style.display === 'block') document.getElementById('gmailManual').focus();
+}
+
+function doManualVerify(){
+  const inp = document.getElementById('gmailManual');
+  const gmail = inp.value.trim().toLowerCase();
+  if(!gmail || !gmail.includes('@')){
+    inp.style.borderColor = '#ef4444'; inp.focus(); return;
+  }
+  inp.style.borderColor = '#e2e8f0';
+  user = { email:gmail, name:gmail.split('@')[0], picture:null };
+  sessionStorage.setItem('hr_gu', JSON.stringify(user));
+  showAuthStatus('verifying', user.name, gmail, null);
+  setTimeout(()=> verifyGmail(gmail), 600);
+}
+
+// ============ RESTORE SESSION ============
+function restoreSession(){
+  const sv = sessionStorage.getItem('hr_gu');
+  if(sv){
+    try{
+      user = JSON.parse(sv);
+      const inp = document.getElementById('gmailManual');
+      if(inp) inp.value = user.email || '';
+      showAuthStatus('verifying', user.name, user.email, user.picture);
+      setTimeout(()=> verifyGmail(user.email), 800);
+    }catch(e){}
+  }
+}
+
+// ============ VERIFY GMAIL ============
+function verifyGmail(email){
+  const em = email.toLowerCase().trim();
+  // Check duplicate today — only block same person same action
+  const todayKey = 'hr_h_'+new Date().toISOString().split('T')[0];
+  const hist = JSON.parse(localStorage.getItem(todayKey)||'[]');
+  // Only block if SAME Gmail + SAME type (checkin or checkout)
+  const dup = hist.find(h => h.email && h.email.toLowerCase()===em && h.type===(QD?QD.type:''));
+  if(dup && matched){
+    showAuthStatus('error', matched.Name+' — '+QD.type+' ហើយ', em, user.picture);
+    showMsg('⚠️ '+matched.Name+' បាន '+(QD.type==='checkin'?'Check In':'Check Out')+' ម៉ោង '+dup.time+' ហើយ!', 'err');
+    return;
+  }
+  if(!staff.length){
+    // Allow with warning if no staff data
+    matched = {ID:'', Name:em.split('@')[0], Gmail:em, Position:'', Department:''};
+    showAuthStatus('success', matched.Name, em, user.picture);
+    showMsg('⚠️ Staff List ទទេ — បន្ត (គ្មាន Verify)', 'warn');
+    afterVerified(); return;
+  }
+  const found = staff.find(s => s.Gmail && s.Gmail.toLowerCase().trim()===em);
+  if(!found){
+    matched = null;
+    showAuthStatus('error', 'Verify Failed', em, user.picture);
+    showMsg('❌ Gmail "'+em+'" មិន Register ក្នុងប្រព័ន្ធ! ទាក់ទង HR Admin', 'err');
+    return;
+  }
+  matched = found;
+  showAuthStatus('success', found.Name+' ('+found.ID+')', em, user.picture);
+  hideMsg();
+  afterVerified();
+}
+
+function showAuthStatus(type, name, email, pic){
+  const el = document.getElementById('authStatus');
+  const icons = {verifying:'⏳', success:'✅', error:'❌', pending:'👤'};
+  const cls   = {verifying:'verifying', success:'success', error:'error', pending:'pending'};
+  const colors= {verifying:'#92400e', success:'#065f46', error:'#991b1b', pending:'#64748b'};
+  const avatar = pic
+    ? `<img src="${pic}" class="auth-avatar" onerror="this.style.display='none'">`
+    : `<div class="auth-avatar-ph">${name.charAt(0).toUpperCase()}</div>`;
+  el.className = 'auth-status '+(cls[type]||'pending');
+  el.innerHTML = avatar + `<div class="auth-info">
+    <div class="name">${name}</div>
+    <div class="email">${email}</div>
+    <div class="status-lbl ${type==='success'?'ok':type==='error'?'err':'wait'}">${icons[type]||''} ${
+      type==='verifying'?'កំពុង Verify...':
+      type==='success'?'✅ Verify ជោគជ័យ!':
+      type==='error'?'❌ Verify មិនជោគជ័យ':
+      'រង់ចាំ...'}</div>
+  </div>`;
+}
+
+function afterVerified(){
+  document.getElementById('gpsBox').style.display = 'block';
+  const btn = document.getElementById('actBtn');
+  btn.style.display = 'flex';
+  stepDone('s2','s3');
+  startGPS();
+}
+
+// ============ GPS ============
+function startGPS(){
+  if(!navigator.geolocation){ setGPS('err','Browser មិន Support GPS — ប្រើ Chrome/Safari'); enableBtn(false,'Browser មិន Support GPS'); return; }
+  navigator.geolocation.watchPosition(onGPS, onGPSErr, {enableHighAccuracy:true, timeout:15000, maximumAge:5000});
+}
+
+function onGPS(pos){
+  gps = {lat:pos.coords.latitude, lng:pos.coords.longitude, acc:pos.coords.accuracy};
+  document.getElementById('gpsAcc').textContent = '±'+Math.round(pos.coords.accuracy)+'m';
+  document.getElementById('gpsDet').textContent = 'Lat:'+pos.coords.latitude.toFixed(5)+' | Lng:'+pos.coords.longitude.toFixed(5);
+  if(QD && QD.lat && parseFloat(QD.lat) !== 0){
+    const d = calcDist(pos.coords.latitude, pos.coords.longitude, +QD.lat, +QD.lng);
+    const r = +(QD.radius||100);
+    const ok = d <= r;
+    document.getElementById('distBar').style.display = 'block';
+    document.getElementById('distTxt').textContent = 'ចម្ងាយ: '+Math.round(d)+'m';
+    document.getElementById('radiusTxt').textContent = 'Max: '+r+'m';
+    const pct = Math.min(100,(d/r)*100);
+    document.getElementById('barFill').style.width = pct+'%';
+    document.getElementById('barFill').style.background = ok ? '#10b981' : '#ef4444';
+    if(ok){ setGPS('ok','✅ នៅក្នុងតំបន់ ('+Math.round(d)+'m)'); enableBtn(true); }
+    else  { setGPS('warn','⚠️ ក្រៅតំបន់ — '+Math.round(d)+'m (Max:'+r+'m)'); enableBtn(false,'ក្រៅតំបន់ GPS'); }
+  }else{
+    // No GPS fence defined — still require GPS lock with reasonable accuracy
+    if(pos.coords.accuracy <= 300){
+      setGPS('ok','✅ GPS OK (±'+Math.round(pos.coords.accuracy)+'m)');
+      enableBtn(true);
+    } else {
+      setGPS('warn','⏳ GPS មិនច្បាស់ (±'+Math.round(pos.coords.accuracy)+'m) — រង់ចាំ...');
+      enableBtn(false,'GPS មិនច្បាស់');
+    }
+  }
+}
+
+function onGPSErr(e){
+  const msg = e.code === 1 ? '🚫 GPS បានបដិសេធ — សូម Allow Location' :
+              e.code === 2 ? '📡 GPS ចាប់មិនបាន — ចេញខាងក្រៅ' :
+                             '⏱️ GPS Timeout — ព្យាយាមម្ដងទៀត';
+  setGPS('err', msg);
+  gps = null;
+  enableBtn(false, msg); // ❌ BLOCK Check In when GPS fails
+}
+
+function setGPS(t, msg){
+  document.getElementById('gdot').className = 'gdot '+t;
+  document.getElementById('gpsText').textContent = msg;
+  if(t==='ok') stepDone('s3', null);
+}
+
+function enableBtn(ok, msg){
+  const btn = document.getElementById('actBtn');
+  btn.disabled = !ok;
+  const ci = QD && QD.type === 'checkin';
+  document.getElementById('actIco').className = 'fas fa-'+(ok?(ci?'sign-in-alt':'sign-out-alt'):'map-marker-alt');
+  document.getElementById('actTxt').textContent = ok
+    ? (ci ? '✅ ចុច Check In' : '✅ ចុច Check Out')
+    : (msg||'GPS Error');
+}
+
+function calcDist(a,b,c,d){
+  const R=6371000, dL=(c-a)*Math.PI/180, dN=(d-b)*Math.PI/180;
+  const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dN/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+// ============ SUBMIT ============
+async function doSubmit(){
+  if(busy || !matched) return;
+  // GPS Guard — block if no valid GPS
+  if(!gps){
+    showMsg('🚫 GPS ចាប់មិនបាន — សូម Allow Location ហើយ រង់ចាំ GPS Lock', 'err');
+    return;
+  }
+  // Check GPS fence again at submit time
+  if(QD && QD.lat && parseFloat(QD.lat) !== 0){
+    const d = calcDist(gps.lat, gps.lng, +QD.lat, +QD.lng);
+    const r = +(QD.radius||100);
+    if(d > r){
+      showMsg('🚫 ក្រៅតំបន់! ចម្ងាយ: '+Math.round(d)+'m (Max: '+r+'m)', 'err');
+      return;
+    }
+  }
+  busy = true;
+  document.getElementById('actBtn').disabled = true;
+  document.getElementById('actIco').className = 'fas fa-spinner fa-spin';
+  document.getElementById('actTxt').textContent = 'កំពុង Sync...';
+  stepDone('s4', null);
+
+  const n = new Date();
+  const time = pad(n.getHours())+':'+pad(n.getMinutes());
+  const date = n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate());
+  const dept = matched ? (matched.Department||matched.Position||'') : '';
+  const pos  = matched ? (matched.Position||'') : '';
+  const li   = calcLate(time, QD.type, dept);
+  const role = getDeptRole(dept);
+
+  const row = {
+    ID:matched.ID||matched.Gmail, Name:matched.Name, Gmail:user.email,
+    ProjectName:QD.project, Date:date, Time:time,
+    Timestamp:n.toISOString(),
+    Latitude:gps?String(gps.lat):'', Longitude:gps?String(gps.lng):'',
+    Accuracy:gps?Math.round(gps.acc)+'m':'',
+    LateEarly:li.label, Minutes:String(li.min),
+    Position:matched.Position||'', Department:matched.Department||'',
+  };
+
+  const sn = QD.type==='checkin' ? 'CheckIn' : 'CheckOut';
+  const hdrs = ['ID','Name','Gmail','ProjectName','Date','Time','Timestamp','Latitude','Longitude','Accuracy','LateEarly','Minutes','Position','Department'];
+  postForm({action:'append', sheet:sn, data:row, row:hdrs.map(h=>row[h]||''), headers:hdrs});
+
+  // Upsert Attendance
+  const attRow = {
+    ID:row.ID, Name:row.Name, Position:row.Position, Department:row.Department,
+    ProjectName:row.ProjectName, Date:date,
+    CheckIn:  QD.type==='checkin'  ? time : '',
+    CheckOut: QD.type==='checkout' ? time : '',
+    Late:     QD.type==='checkin'  ? li.label : '',
+    Early:    QD.type==='checkout' ? li.label : '',
+    Status:   QD.type==='checkin'  ? (li.type==='late'?'Late':'Present') : 'Present',
+  };
+  const aHdrs = ['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date'];
+  setTimeout(()=>postForm({action:'upsert',sheet:'Attendance',keyField:'ID',keyValue:row.ID,keyDate:date,type:QD.type,data:attRow,row:aHdrs.map(h=>attRow[h]||''),headers:aHdrs}), 1000);
+
+  // Save to local history
+  const hk = 'hr_h_'+date;
+  const hh = JSON.parse(localStorage.getItem(hk)||'[]');
+  hh.unshift({id:row.ID, name:row.Name, email:user.email, time, type:QD.type, late:li.label, ts:Date.now()});
+  localStorage.setItem(hk, JSON.stringify(hh.slice(0,20)));
+
+  showResult(row, time, li);
+  busy = false;
+}
+
+function postForm(payload){
+  try{
+    let fr = document.getElementById('_sf_');
+    if(!fr){ fr=document.createElement('iframe'); fr.name='_sf_'; fr.id='_sf_'; fr.style.display='none'; document.body.appendChild(fr); }
+    const f=document.createElement('form');
+    f.method='POST'; f.action=SU; f.target='_sf_'; f.style.display='none';
+    const i=document.createElement('input'); i.type='hidden'; i.name='payload'; i.value=JSON.stringify(payload);
+    f.appendChild(i); document.body.appendChild(f); f.submit(); document.body.removeChild(f);
+  }catch(e){
+    fetch(SU,{method:'POST',mode:'no-cors',body:JSON.stringify(payload),headers:{'Content-Type':'text/plain'}}).catch(()=>{});
+  }
+}
+
+// ============ LATE/EARLY ============
+function calcLate(t, type, dept){
+  const role = getDeptRole(dept);
+  const [h,m] = t.split(':').map(Number), tot = h*60+m;
+  if (type === 'checkin') {
+    const [sh,sm] = role.checkIn.split(':').map(Number);
+    const st = sh*60+sm + (role.lateGrace||0);
+    if (tot > st) return {label:'Late '+(tot-st)+'min', min:tot-st, type:'late', color:'#f59e0b'};
+    return {label:'OnTime', min:0, type:'ontime', color:'#10b981'};
+  } else {
+    const [eh,em] = role.checkOut.split(':').map(Number);
+    const et = eh*60+em - (role.earlyGrace||0);
+    const ot = eh*60+em;
+    if (tot < et) return {label:'Early '+(et-tot)+'min', min:et-tot, type:'early', color:'#ef4444'};
+    if (tot > ot) return {label:'OT '+(tot-ot)+'min', min:tot-ot, type:'ot', color:'#8b5cf6'};
+    return {label:'OnTime', min:0, type:'ontime', color:'#10b981'};
+  }
+}
+
+
+function showResult(row, time, li){
+  ['authBox','gpsBox','projBox'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('actBtn').style.display='none';
+  document.getElementById('msgBox').className='msg-box';
+  const ci=QD.type==='checkin';
+  const rb=document.getElementById('resBox');
+  rb.style.display='block'; rb.className='res ok';
+  document.getElementById('resIco').textContent = ci?'✅':'🟡';
+  document.getElementById('resTit').textContent = ci?'Check In ជោគជ័យ!':'Check Out ជោគជ័យ!';
+  document.getElementById('resTm').textContent = time;
+  document.getElementById('resTm').style.color = ci?'#059669':'#d97706';
+  const lc = li.type==='ontime'?'#d1fae5;color:#065f46':li.type==='late'?'#fef3c7;color:#92400e':'#fee2e2;color:#991b1b';
+  document.getElementById('resDet').innerHTML =
+    '<strong>'+row.Name+'</strong> ('+row.ID+')<br>'+
+    '<span style="font-size:12px;color:#64748b;">'+user.email+'</span><br>'+
+    '<span class="late-badge" style="background:'+lc+'">'+li.label+'</span><br>'+
+    'គម្រោង: '+row.ProjectName;
+  loadHist();
+}
+
+function doReset(){
+  ['authBox','gpsBox','projBox'].forEach(id=>document.getElementById(id).style.display='block');
+  document.getElementById('actBtn').style.display='flex';
+  document.getElementById('resBox').style.display='none';
+  matched=null; user=null; busy=false;
+  sessionStorage.removeItem('hr_gu');
+  document.getElementById('actBtn').disabled=true;
+  document.getElementById('actIco').className='fas fa-spinner fa-spin';
+  document.getElementById('actTxt').textContent='Sign In Gmail ជាមុន';
+  document.getElementById('authStatus').className='auth-status pending';
+  document.getElementById('authStatus').innerHTML='<div class="auth-avatar-ph"><i class="fas fa-user"></i></div><div class="auth-info"><div class="name">មិនទាន់ Sign In</div><div class="email">ចុច Sign in ខាងលើ</div></div>';
+  document.getElementById('gmailManual').value='';
+  document.getElementById('manualBox').style.display='none';
+  stepReset();
+  hideMsg();
+  loadHist();
+}
+
+// ============ HISTORY ============
+function loadHist(){
+  const hk='hr_h_'+new Date().toISOString().split('T')[0];
+  const h=JSON.parse(localStorage.getItem(hk)||'[]');
+  const el=document.getElementById('histList');
+  if(!h.length){el.innerHTML='<p style="font-size:12px;color:#94a3b8;text-align:center;padding:8px;">គ្មានកំណត់ត្រា</p>';return;}
+  el.innerHTML=h.slice(0,8).map(x=>
+    '<div class="hi"><div><strong>'+x.name+'</strong> ('+x.id+')<br>'+
+    '<span style="color:#64748b;font-size:11px;">'+x.late+'</span></div>'+
+    '<div style="text-align:right;"><div style="font-weight:600;">'+x.time+'</div>'+
+    '<span style="font-size:11px;background:'+(x.type==='checkin'?'#d1fae5;color:#065f46':'#fef3c7;color:#92400e')+';padding:2px 8px;border-radius:10px;">'+(x.type==='checkin'?'In':'Out')+'</span></div></div>'
+  ).join('');
+}
+
+// ============ HELPERS ============
+function stepDone(id, nextId){
+  const el=document.getElementById(id);
+  if(el){el.className='step done'; el.querySelector('.sn').innerHTML='<i class="fas fa-check" style="font-size:9px;"></i>';}
+  if(nextId){const ne=document.getElementById(nextId); if(ne) ne.className='step active';}
+}
+function stepReset(){
+  ['s2','s3','s4'].forEach((id,i)=>{
+    const el=document.getElementById(id);
+    if(el){el.className='step'+(i===0?' active':''); el.querySelector('.sn').textContent=String(i+2);}
+  });
+}
+function showMsg(msg, type){ const el=document.getElementById('msgBox'); document.getElementById('msgTxt').textContent=msg; el.className='msg-box show '+type; }
+function hideMsg(){ document.getElementById('msgBox').className='msg-box'; }
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(r => console.log('[SW] Registered:', r.scope))
+      .catch(e => console.warn('[SW] Failed:', e));
+  });
+}
+// PWA Install Prompt
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Show install button if exists
+  const btn = document.getElementById('pwaInstallBtn');
+  if (btn) btn.style.display = 'flex';
+});
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  const btn = document.getElementById('pwaInstallBtn');
+  if (btn) btn.style.display = 'none';
+  console.log('[PWA] App installed!');
+});
+function installPWA() {
+  if (!deferredPrompt) {
+    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
+    return;
+  }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(r => {
+    console.log('[PWA] Install:', r.outcome);
+    deferredPrompt = null;
+  });
+}
+</script>
+</body>
+</html>
