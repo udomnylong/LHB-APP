@@ -1,12 +1,12 @@
 // LHB HR System — Service Worker v1.0
 // Handles caching for offline PWA support
 
-const CACHE_NAME = 'lhb-hr-v1';
+const CACHE_NAME = 'lhb-app-v1';
 const CACHE_URLS = [
-  '/LHB-HR/hr-system.html',
-  '/LHB-HR/qr-scan.html',
-  '/LHB-HR/food-scan.html',
-  '/LHB-HR/manifest.json',
+  '/LHB-APP/hr-system.html',
+  '/LHB-APP/qr-scan.html',
+  '/LHB-APP/food-scan.html',
+  '/LHB-APP/manifest.json',
 ];
 
 // Install — cache core files
@@ -64,7 +64,7 @@ self.addEventListener('fetch', event => {
           if (cached) return cached;
           // Return offline page for HTML requests
           if (event.request.destination === 'document') {
-            return caches.match('/LHB-HR/hr-system.html');
+            return caches.match('/LHB-APP/hr-system.html');
           }
         });
       })
@@ -77,8 +77,8 @@ self.addEventListener('push', event => {
   const data = event.data.json();
   self.registration.showNotification(data.title || 'LHB HR', {
     body: data.body || '',
-    icon: '/LHB-HR/icon-192.png',
-    badge: '/LHB-HR/icon-192.png',
+    icon: '/LHB-APP/icon-192.png',
+    badge: '/LHB-APP/icon-192.png',
     tag: 'lhb-hr-notification',
   });
 });

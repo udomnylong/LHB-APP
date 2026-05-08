@@ -2,8 +2,8 @@
   "name": "LHB HR System",
   "short_name": "LHB HR",
   "description": "LHB HR Management System — Check In/Out, Staff, Attendance",
-  "start_url": "/LHB-HR/hr-system.html",
-  "scope": "/LHB-HR/",
+  "start_url": "https://udomnylong.github.io/LHB-APP/hr-system.html",
+  "scope": "https://udomnylong.github.io/LHB-APP/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#1a3c5e",
@@ -27,16 +27,29 @@
     {
       "name": "Check In/Out",
       "short_name": "QR Scan",
-      "url": "/LHB-HR/qr-scan.html",
-      "icons": [{"src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='16' fill='%230d9e6e'/><text x='48' y='68' font-size='56' text-anchor='middle'>📷</text></svg>", "sizes": "96x96"}]
+      "url": "https://udomnylong.github.io/LHB-APP/qr-scan.html",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='16' fill='%230d9e6e'/><text x='48' y='68' font-size='56' text-anchor='middle'>📷</text></svg>",
+          "sizes": "96x96"
+        }
+      ]
     },
     {
       "name": "Food Scan",
       "short_name": "Food",
-      "url": "/LHB-HR/food-scan.html",
-      "icons": [{"src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='16' fill='%23e07b00'/><text x='48' y='68' font-size='56' text-anchor='middle'>🍽️</text></svg>", "sizes": "96x96"}]
+      "url": "https://udomnylong.github.io/LHB-APP/food-scan.html",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='16' fill='%23e07b00'/><text x='48' y='68' font-size='56' text-anchor='middle'>🍽️</text></svg>",
+          "sizes": "96x96"
+        }
+      ]
     }
   ],
-  "categories": ["business", "productivity"],
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "prefer_related_applications": false
 }
