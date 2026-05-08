@@ -4,7 +4,9 @@
 <head>
 <meta charset="UTF-8">
   <!-- PWA Manifest -->
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="manifest.json" id="pwaManifest">
+  <!-- Remove manifest on file:// to avoid CORS error -->
+  <script>if(location.protocol==='file:'){var ml=document.getElementById('pwaManifest');if(ml)ml.remove();}</script>
   <!-- iOS PWA Support -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -990,6 +992,7 @@ async function doLogin() {
     startTimeoutWatcher();
   } else {
     document.getElementById('loginError').style.display = 'block';
+    console.error('[Login] Failed for user:', u, '| Sheet users loaded:', appData.users.length);
   }
 }
 
@@ -1020,7 +1023,7 @@ function setCurrentDate() {
 
 const SHEET_HEADERS = {
   User:       ['Username','Password','Name','Role','Email'],
-  StaffInfo:  ['ID','Name','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber','Photo','Phone'],
+  StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber','Photo','Phone'],
   Attendance: ['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date'],
   StaffLeave: ['ID','Name','TypeOfLeave','StartDate','EndDate','Days','Reason','Status'],
   Project:    ['ProjectID','ProjectName','Location','Latitude','Longitude','Radius','Status'],
@@ -1388,6 +1391,15 @@ function renderStaff(data) {
     </tr>`).join('');
   document.getElementById('staffPagInfo').textContent = `បង្ហាញ ${start+1}-${Math.min(start+PER_PAGE,total)} នៃ ${total}`;
   renderPages('staffPages', currentPage.staff, Math.ceil(total/PER_PAGE), p => { currentPage.staff = p; renderStaff(); });
+}
+
+function populateProjectFilter(selectId, data, field) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const cur = sel.value;
+  const projects = [...new Set((data||[]).map(r => String(r[field]||'')).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">🏗️ គម្រោងទាំងអស់</option>' +
+    projects.map(p => `<option value="${p}"${p===cur?' selected':''}>${p}</option>`).join('');
 }
 
 function filterStaff() { currentPage.staff = 1; renderStaff(); }
@@ -1885,7 +1897,7 @@ function quickGenQR(name) {
 }
 
 // ========== EMBEDDED SCAN PAGE ==========
-function buildScanPageHTML(qrData) {
+async function buildScanPageHTML(qrData) {
   const SCRIPT_URL = APPS_SCRIPT_URL;
   const D = JSON.stringify(qrData);
   return `<!DOCTYPE html>
@@ -2259,41 +2271,6 @@ function loadHist(){
 }
 <\/script>
 
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
-  });
-}
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
-function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
-}
-</script>
 </body>
 </html>`;
 }
@@ -2815,41 +2792,6 @@ function printSlip() {
   <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
   <style>body{font-family:'Kantumruy Pro',sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}td,th{border:1px solid #ccc;padding:8px;}th{background:#f5f5f5;}.total{background:#1a3c5e;color:#fff;font-weight:700;}</style>
   </head><body>${content.outerHTML}
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
-  });
-}
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
-function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
-}
-</script>
 </body></html>`);
   w.document.close(); w.print();
 }
@@ -2973,41 +2915,6 @@ function printAttendancePDF() {
     </table>
     <script>window.onload=()=>{window.print();}<\/script>
   
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
-  });
-}
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
-function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
-}
-</script>
 </body></html>`);
   w.document.close();
 }
@@ -3030,41 +2937,6 @@ function printLeavePDF() {
     <table><thead><tr><th>ID</th><th>ឈ្មោះ</th><th>ប្រភេទ</th><th>ចាប់ពី</th><th>ដល់</th><th>ថ្ងៃ</th><th>មូលហេតុ</th><th>ស្ថានភាព</th></tr></thead>
     <tbody>${rows}</tbody></table>
     <script>window.onload=()=>{window.print();}<\/script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
-  });
-}
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
-function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
-}
-</script>
 </body></html>`);
   w.document.close();
 }
@@ -3087,41 +2959,6 @@ function printOTPDF() {
     <table><thead><tr><th>ID</th><th>ឈ្មោះ</th><th>ថ្ងៃ</th><th>ម៉ោង</th><th>ប្រភេទ</th><th>ស្ថានភាព</th><th>កំណត់ចំណាំ</th></tr></thead>
     <tbody>${rows}</tbody></table>
     <script>window.onload=()=>{window.print();}<\/script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
-  });
-}
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
-function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
-}
-</script>
 </body></html>`);
   w.document.close();
 }
@@ -3170,41 +3007,6 @@ function printPayrollPDF() {
     </table>
     <script>window.onload=()=>{window.print();}<\/script>
   
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
-  });
-}
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
-function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
-}
-</script>
 </body></html>`);
   w.document.close();
 }
@@ -3229,41 +3031,6 @@ function printReportPDF() {
     <table><thead><tr><th>ID</th><th>ឈ្មោះ</th><th>ផ្នែក</th><th>វត្តមាន</th><th>អវត្តមាន</th><th>ប្រាក់ខែ</th></tr></thead>
     <tbody>${rows}</tbody></table>
     <script>window.onload=()=>{window.print();}<\/script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
-  });
-}
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
-function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
-}
-</script>
 </body></html>`);
   w.document.close();
 }
@@ -3297,41 +3064,6 @@ function printStaff() {
     </table>
     <script>window.onload=()=>{window.print();}<\/script>
   
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
-  });
-}
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
-function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
-}
-</script>
 </body></html>`);
   w.document.close();
 }
@@ -4100,41 +3832,6 @@ function printFoodPDF() {
     </table>
     <script>window.onload=()=>{window.print();}<\/script>
   
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
-  });
-}
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
-function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
-}
-</script>
 </body></html>`);
   w.document.close();
 }
@@ -4462,7 +4159,7 @@ let _timeoutTimer = null;
 function resetActivityTimer() {
   _lastActivity = Date.now();
 }
-function startTimeoutWatcher() {
+async function startTimeoutWatcher() {
   if (_timeoutTimer) clearInterval(_timeoutTimer);
   _timeoutTimer = setInterval(async () => {
     if (!currentUser) return;
@@ -4494,39 +4191,36 @@ function startTimeoutWatcher() {
 checkSession();
 </script>
 
+
 <script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(r => console.log('[SW] Registered:', r.scope))
-      .catch(e => console.warn('[SW] Failed:', e));
+if (location.protocol === 'https:' || location.hostname === 'localhost') {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('sw.js')
+        .then(function(r) { console.log('[SW] Registered:', r.scope); })
+        .catch(function(e) { console.warn('[SW] Failed:', e); });
+    });
+  }
+  // PWA Install Prompt
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    window._pwaPrompt = e;
+    var btn = document.getElementById('pwaInstallBtn');
+    if (btn) btn.style.display = 'flex';
+  });
+  window.addEventListener('appinstalled', function() {
+    window._pwaPrompt = null;
+    var btn = document.getElementById('pwaInstallBtn');
+    if (btn) btn.style.display = 'none';
   });
 }
-// PWA Install Prompt
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Show install button if exists
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'flex';
-});
-window.addEventListener('appinstalled', () => {
-  deferredPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
-  console.log('[PWA] App installed!');
-});
 function installPWA() {
-  if (!deferredPrompt) {
-    alert('ចុច Share → "Add to Home Screen" ដើម្បី Install (iOS)');
-    return;
+  if (window._pwaPrompt) {
+    window._pwaPrompt.prompt();
+  } else {
+    alert('iOS: Share ⬆️ → "Add to Home Screen"
+Android: Menu → "Install App"');
   }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then(r => {
-    console.log('[PWA] Install:', r.outcome);
-    deferredPrompt = null;
-  });
 }
 </script>
 </body>
