@@ -8,7 +8,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="LHB Staff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="LHB Staff">
 <meta name="theme-color" content="#0f172a">
+<link rel="apple-touch-icon" sizes="180x180" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='32' fill='%230f172a'/><text x='90' y='120' font-size='90' text-anchor='middle'>👤</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@300;400;500;600;700&family=Noto+Sans+Khmer:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
@@ -218,6 +221,10 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
       </div>
       <div class="top-avatar" id="topAvatar" onclick="toggleProfileMenu()">?</div>
     </div>
+    <!-- PWA Install button (Android only, hidden by default) -->
+    <button id="pwaInstallBtn" onclick="installPWA()" style="display:none;align-items:center;gap:5px;padding:5px 10px;border:1.5px solid rgba(255,255,255,.4);border-radius:16px;background:rgba(255,255,255,.15);color:#fff;font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer;margin-right:6px;">
+      📲 Install
+    </button>
     <!-- Profile menu -->
     <div class="profile-menu hidden" id="profileMenu">
       <div class="pmenu-item" onclick="showChangePwd()"><i class="fas fa-key"></i> ផ្លាស់ប្ដូរ Password</div>
@@ -1116,10 +1123,11 @@ function showToast(msg, type) {
 // BOOT
 // ════════════════════════════════════════════════
 (function boot() {
-  // Remove manifest on file://
+  // Remove manifest on file:// to avoid CORS error
   if (location.protocol === 'file:') {
     const ml = document.getElementById('staffManifest');
     if (ml) ml.remove();
+    console.log('[PWA] Manifest removed for file:// protocol');
   }
 
   // Restore session
@@ -1139,9 +1147,44 @@ function showToast(msg, type) {
   document.getElementById('topGreet').textContent = greet;
 })();
 
+// ═══ PWA Install ═══
+let _pwaPrompt = null;
+
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _pwaPrompt = e;
+  // Show install button
+  const btn = document.getElementById('pwaInstallBtn');
+  if (btn) btn.style.display = 'flex';
+  console.log('[PWA] Install prompt ready');
+});
+
+window.addEventListener('appinstalled', function() {
+  _pwaPrompt = null;
+  const btn = document.getElementById('pwaInstallBtn');
+  if (btn) btn.style.display = 'none';
+  console.log('[PWA] App installed!');
+});
+
+function installPWA() {
+  if (_pwaPrompt) {
+    _pwaPrompt.prompt();
+    _pwaPrompt.userChoice.then(function(r) {
+      console.log('[PWA] User choice:', r.outcome);
+      _pwaPrompt = null;
+    });
+  } else {
+    // iOS fallback
+    alert('iOS: ចុច Share ⬆️ → "Add to Home Screen"
+Android: Menu ⋮ → "Install App"');
+  }
+}
+
 // Service Worker (HTTPS only)
 if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(()=>{});
+  navigator.serviceWorker.register('sw.js')
+    .then(function(r) { console.log('[SW] Registered:', r.scope); })
+    .catch(function(e) { console.warn('[SW] Failed:', e); });
 }
 
 // ── Auto Sync every 30 seconds ──

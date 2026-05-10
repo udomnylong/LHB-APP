@@ -1,0 +1,45 @@
+{
+  "name": "LHB Staff Portal",
+  "short_name": "LHB Staff",
+  "description": "LHB Staff Portal — Check In/Out, Leave, OT, Food",
+  "start_url": "https://udomnylong.github.io/LHB-APP/staff-portal.html",
+  "scope": "https://udomnylong.github.io/LHB-APP/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "lang": "km",
+  "icons": [
+    {
+      "src": "icon-staff-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-staff-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Check In",
+      "short_name": "Check In",
+      "url": "https://udomnylong.github.io/LHB-APP/qr-scan.html?d=%7B%22type%22%3A%22checkin%22%7D",
+      "description": "QR Check In"
+    },
+    {
+      "name": "Check Out",
+      "short_name": "Check Out",
+      "url": "https://udomnylong.github.io/LHB-APP/qr-scan.html?d=%7B%22type%22%3A%22checkout%22%7D",
+      "description": "QR Check Out"
+    }
+  ],
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "prefer_related_applications": false
+}
