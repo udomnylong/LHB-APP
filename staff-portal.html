@@ -594,20 +594,22 @@ function initApp(staff) {
   document.getElementById('topGreet').textContent = greet;
   document.getElementById('topName').textContent  = name;
 
-  // Avatar
-  const av = document.getElementById('topAvatar');
-  if (staff.Photo && staff.Photo.startsWith('http')) {
-    av.innerHTML = `<img src="${staff.Photo}" onerror="this.parentNode.textContent='${name[0]||'?'}'">`;
-  } else {
-    av.textContent = name[0] || '?';
-  }
-
-  // Profile card
+  // Profile card + Top avatar
   const pp = document.getElementById('profilePhoto');
+  const topAv = document.getElementById('topAvatar');
+  // Build proper thumbnail URL if it's a Drive link
+  let photoSrc = '';
   if (staff.Photo && staff.Photo.startsWith('http')) {
-    pp.innerHTML = `<img src="${staff.Photo}" onerror="this.parentNode.textContent='${name[0]||'?'}'">`;
+    // Extract fileId and build thumbnail
+    const fidM = staff.Photo.match(/[?&]id=([^&]+)/);
+    photoSrc = fidM ? 'https://drive.google.com/thumbnail?id=' + fidM[1] + '&sz=w200' : staff.Photo;
+  }
+  if (photoSrc) {
+    pp.innerHTML    = '<img src="' + photoSrc + '" alt="' + name + '" style="width:100%;height:100%;object-fit:cover">';
+    topAv.innerHTML = '<img src="' + photoSrc + '" alt="' + name + '" style="width:100%;height:100%;object-fit:cover;border-radius:14px">';
   } else {
-    pp.textContent = name[0] || '?';
+    pp.textContent    = name[0] || '?';
+    topAv.textContent = name[0] || '?';
   }
   document.getElementById('pName').textContent = name;
   document.getElementById('pId').textContent   = id;
@@ -619,9 +621,10 @@ function initApp(staff) {
   if (staff.ProjectName)tags.push(`<span class="profile-tag tag-proj">${staff.ProjectName}</span>`);
   document.getElementById('profileTags').innerHTML = tags.join('');
 
-  // Leave balance
+  // Leave balance + today status
   loadLeaveBalance(id);
   loadTodayStatus(id);
+  startAutoSync(); // Auto sync every 30s
 
   // Show app
   document.getElementById('loginScreen').classList.add('hidden');
@@ -684,17 +687,58 @@ function getQRBase() {
   return { project: p, lat, lng, radius: 100 };
 }
 
+function buildQRData(type) {
+  const staff = currentStaff || {};
+  return {
+    project:  staff.ProjectName || 'LHB',
+    type:     type,
+    lat:      staff.Latitude  || '',
+    lng:      staff.Longitude || '',
+    radius:   100,
+    // Auto-fill user info for qr-scan to skip Step 2
+    autoGmail: staff.Gmail || '',
+    autoName:  staff.Name  || '',
+    autoID:    staff.ID    || '',
+    autoPos:   staff.Position   || '',
+    autoDept:  staff.Department || '',
+    autoProj:  staff.ProjectName|| '',
+  };
+}
 function goCheckIn() {
-  const proj = currentStaff ? (currentStaff.ProjectName||'LHB') : 'LHB';
-  const data = encodeURIComponent(JSON.stringify({ project:proj, type:'checkin', lat:'', lng:'', radius:100 }));
+  // Save current user to sessionStorage so qr-scan can auto-verify
+  if (currentStaff) sessionStorage.setItem('hr_gu', JSON.stringify({
+    email:   currentStaff.Gmail || '',
+    name:    currentStaff.Name  || '',
+    picture: null,
+    _staffId: currentStaff.ID || ''
+  }));
+  const data = encodeURIComponent(JSON.stringify(buildQRData('checkin')));
   window.location.href = BASE_URL + '/qr-scan.html?d=' + data;
 }
 function goCheckOut() {
-  const proj = currentStaff ? (currentStaff.ProjectName||'LHB') : 'LHB';
-  const data = encodeURIComponent(JSON.stringify({ project:proj, type:'checkout', lat:'', lng:'', radius:100 }));
+  if (currentStaff) sessionStorage.setItem('hr_gu', JSON.stringify({
+    email:   currentStaff.Gmail || '',
+    name:    currentStaff.Name  || '',
+    picture: null,
+    _staffId: currentStaff.ID || ''
+  }));
+  const data = encodeURIComponent(JSON.stringify(buildQRData('checkout')));
   window.location.href = BASE_URL + '/qr-scan.html?d=' + data;
 }
+
+// ══ FIX 6: Food Scan — Auto fill user ══
 function goFood() {
+  if (currentStaff) {
+    // Store staff info for food-scan to auto-fill
+    sessionStorage.setItem('food_staff', JSON.stringify({
+      ID:   currentStaff.ID   || '',
+      Name: currentStaff.Name || '',
+      Sex:  currentStaff.Sex  || '',
+      Position:    currentStaff.Position    || '',
+      Department:  currentStaff.Department  || '',
+      ProjectName: currentStaff.ProjectName || '',
+    }));
+  }
   window.location.href = BASE_URL + '/food-scan.html';
 }
 
@@ -816,19 +860,44 @@ async function submitOT() {
 // ════════════════════════════════════════════════
 // PHOTO PREVIEW
 // ════════════════════════════════════════════════
+// Store photo data globally keyed by boxId
+const _photoData = {};
+
 function previewPhoto(input, previewId, boxId) {
   const file = input.files[0];
   if (!file) return;
+  // Compress before reading
   const reader = new FileReader();
   reader.onload = function(e) {
-    const preview = document.getElementById(previewId);
-    preview.src = e.target.result;
-    preview.style.display = 'block';
-    document.getElementById(boxId.replace('Box','Placeholder')||boxId).style.display = 'none';
-    document.getElementById(boxId).classList.add('has-photo');
-    document.getElementById(boxId)._base64 = e.target.result.split(',')[1];
-    document.getElementById(boxId)._mime   = file.type;
-    document.getElementById(boxId)._fname  = file.name;
+    // Compress image using canvas
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const MAX = 1200;
+      let w = img.width, h = img.height;
+      if (w > MAX) { h = h * MAX / w; w = MAX; }
+      if (h > MAX) { w = w * MAX / h; h = MAX; }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.75);
+
+      // Show preview
+      const preview = document.getElementById(previewId);
+      preview.src = compressed;
+      preview.style.display = 'block';
+      // Hide placeholder
+      const placeholder = document.getElementById(boxId.replace('Box','Placeholder'));
+      if (placeholder) placeholder.style.display = 'none';
+      document.getElementById(boxId).classList.add('has-photo');
+      // Store in global map (survives DOM property issues)
+      _photoData[boxId] = {
+        base64: compressed.split(',')[1],
+        mime:   'image/jpeg',
+        fname:  file.name.replace(/\.[^.]+$/, '.jpg')
+      };
+    };
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
@@ -854,23 +923,26 @@ async function submitReport(sheetName, prefix) {
     const time = now.toTimeString().slice(0,5);
     let photoUrl = '';
 
-    // Upload photo if exists
-    const pbox = document.getElementById(prefix + 'PhotoBox');
-    if (pbox && pbox._base64) {
+    // Upload photo if exists (using _photoData global map)
+    const boxKey = prefix + 'PhotoBox';
+    const photoInfo = _photoData[boxKey];
+    if (photoInfo && photoInfo.base64) {
       try {
+        showToast('📸 កំពុង Upload រូបភាព...', '');
         const ur = await fetch(SU, {
           method:'POST', mode:'cors', headers:{'Content-Type':'text/plain'},
           body: JSON.stringify({
-            action:'uploadPhoto',
-            base64: pbox._base64,
-            mimeType: pbox._mime || 'image/jpeg',
-            fileName: `${sheetName}_${currentStaff.ID}_${Date.now()}.jpg`,
+            action:   'uploadPhoto',
+            base64:   photoInfo.base64,
+            mimeType: photoInfo.mime || 'image/jpeg',
+            fileName: sheetName + '_' + currentStaff.ID + '_' + Date.now() + '.jpg',
             folderId: FOLDER_ID
           })
         });
         const uj = await ur.json();
-        if (uj.status === 'ok') photoUrl = uj.url;
-      } catch(pe) { console.warn('Photo upload failed:', pe); }
+        if (uj.status === 'ok') { photoUrl = uj.url; console.log('Photo uploaded:', photoUrl); }
+        else { console.warn('Upload failed:', uj.msg); }
+      } catch(pe) { console.warn('Photo upload error:', pe); }
     }
 
     const row = {
@@ -883,7 +955,7 @@ async function submitReport(sheetName, prefix) {
     showToast('✅ ដាក់ស្នើជោគជ័យ!','ok');
     closeModal(prefix + 'Modal');
     if (comment) comment.value = '';
-    if (pbox) { pbox._base64 = null; }
+    delete _photoData[prefix + 'PhotoBox']; // Clear after submit
   } catch(e) { showToast('❌ ' + e.message,'err'); }
   if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> ដាក់ស្នើ'; }
 }
@@ -1003,6 +1075,25 @@ function showToast(msg, type) {
 if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
+
+// ── Auto Sync every 30 seconds ──
+let _syncInterval = null;
+function startAutoSync() {
+  if (_syncInterval) clearInterval(_syncInterval);
+  _syncInterval = setInterval(function() {
+    if (currentStaff) {
+      loadTodayStatus(currentStaff.ID);
+      loadLeaveBalance(currentStaff.ID);
+    }
+  }, 30000);
+}
+// Also sync when page becomes visible again
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden && currentStaff) {
+    loadTodayStatus(currentStaff.ID);
+    loadLeaveBalance(currentStaff.ID);
+  }
+});
 </script>
 </body>
 </html>

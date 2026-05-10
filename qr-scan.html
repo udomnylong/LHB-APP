@@ -507,6 +507,24 @@ function backToPhone() {
 document.addEventListener('DOMContentLoaded', () => {
   parseQR();
   if(!navigator.onLine) document.getElementById('ob').classList.add('show');
+  // Auto-verify if coming from Staff Portal
+  const _sv = sessionStorage.getItem('hr_gu');
+  if (_sv) {
+    try {
+      const _su = JSON.parse(_sv);
+      if (_su.email && _su._staffId) {
+        user = _su;
+        // Wait for staff data to load then auto-verify
+        const _w = setInterval(() => {
+          if (staff && staff.length > 0) {
+            clearInterval(_w);
+            autoVerifyFromPortal(_su);
+          }
+        }, 400);
+        setTimeout(() => clearInterval(_w), 8000);
+      }
+    } catch(e) {}
+  }
   window.addEventListener('offline', ()=>document.getElementById('ob').classList.add('show'));
   window.addEventListener('online',  ()=>document.getElementById('ob').classList.remove('show'));
   loadStaffCache();
@@ -549,6 +567,23 @@ function showErr(){
 function loadStaffCache(){
   const c = localStorage.getItem('hr_sc');
   if(c){ try{ staff = JSON.parse(c); }catch(e){} }
+}
+
+function autoVerifyFromPortal(savedUser) {
+  // Find staff by ID (most reliable)
+  const found = staff.find(s =>
+    String(s.ID||'').trim() === String(savedUser._staffId||'').trim() ||
+    (s.Gmail||'').toLowerCase().trim() === (savedUser.email||'').toLowerCase().trim()
+  );
+  if (!found) return; // Staff not in local list, let user verify manually
+  matched = found;
+  user    = savedUser;
+  // Show confirmed staff card
+  showAuthStatus('success', found.Name + ' (' + found.ID + ')', savedUser.email, null);
+  hideMsg();
+  afterVerified(); // Skip to GPS step!
+  showMsg('✅ Auto Verify: ' + found.Name, 'ok');
+  setTimeout(hideMsg, 2000);
 }
 
 async function loadStaffFromSheet(){
