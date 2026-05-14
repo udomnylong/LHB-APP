@@ -338,16 +338,25 @@ tbody tr:last-child td{border-bottom:none;}
         <input type="date" id="dashDate" onchange="loadDashboard()">
       </div>
       <div class="stats-grid">
-        <div class="stat-card blue"><div class="label">បុគ្គលិកសរុប</div><div class="value" id="statTotal">0</div><div class="icon"><i class="fas fa-users"></i></div></div>
-        <div class="stat-card green"><div class="label">Check In</div><div class="value" id="statIn">0</div><div class="icon"><i class="fas fa-sign-in-alt"></i></div></div>
-        <div class="stat-card amber"><div class="label">Check Out</div><div class="value" id="statOut">0</div><div class="icon"><i class="fas fa-sign-out-alt"></i></div></div>
+        <div class="stat-card blue"><div class="label">បុគ្គលិក (កំពុងធ្វើការ)</div><div class="value" id="statTotal">0</div><div class="icon"><i class="fas fa-users"></i></div></div>
+        <div class="stat-card green"><div class="label">Check In (សរុប)</div><div class="value" id="statIn">0</div><div class="icon"><i class="fas fa-sign-in-alt"></i></div></div>
+        <div class="stat-card amber"><div class="label">Check Out (សរុប)</div><div class="value" id="statOut">0</div><div class="icon"><i class="fas fa-sign-out-alt"></i></div></div>
         <div class="stat-card red"><div class="label">អវត្តមាន</div><div class="value" id="statAbsent">0</div><div class="icon"><i class="fas fa-user-times"></i></div></div>
         <div class="stat-card purple"><div class="label">ឈប់សម្រាក</div><div class="value" id="statLeave">0</div><div class="icon"><i class="fas fa-calendar-check"></i></div></div>
         <div class="stat-card indigo"><div class="label">គម្រោង</div><div class="value" id="statProject">0</div><div class="icon"><i class="fas fa-project-diagram"></i></div></div>
       </div>
       <div class="card">
-        <div class="card-header"><h3><i class="fas fa-chart-line" style="color:var(--primary);margin-right:8px;"></i>វត្តមានប្រចាំថ្ងៃ</h3></div>
-        <div class="chart-placeholder"><i class="fas fa-chart-bar" style="font-size:36px;margin-bottom:8px;"></i><br>ទំព័របង្ហាញតារាង</div>
+        <div class="card-header">
+          <h3><i class="fas fa-chart-line" style="color:var(--primary);margin-right:8px;"></i>វត្តមានប្រចាំថ្ងៃ — តាមគម្រោង</h3>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <span style="font-size:12px;color:#10b981;font-weight:600;"><i class="fas fa-circle" style="font-size:8px;"></i> Check In</span>
+            <span style="font-size:12px;color:#f59e0b;font-weight:600;"><i class="fas fa-circle" style="font-size:8px;"></i> Check Out</span>
+            <span style="font-size:12px;color:#8b5cf6;font-weight:600;"><i class="fas fa-circle" style="font-size:8px;"></i> ឈប់សម្រាក</span>
+          </div>
+        </div>
+        <div id="dashChartContent" style="padding:4px 0;">
+          <p style="color:var(--text2);text-align:center;padding:32px;">⏳ Loading...</p>
+        </div>
       </div>
     </div>
 
@@ -361,6 +370,12 @@ tbody tr:last-child td{border-bottom:none;}
             <select id="staffProjectFilter" onchange="filterStaff()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;min-width:130px;">
               <option value="">🏗️ គម្រោងទាំងអស់</option>
             </select>
+            <select id="staffStatusFilter" onchange="filterStaff()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;min-width:140px;">
+              <option value="">🔖 ស្ថានភាពទាំងអស់</option>
+              <option value="កំពុងធ្វើការ">🟢 កំពុងធ្វើការ</option>
+              <option value="បានឈប់">🔴 បានឈប់</option>
+              <option value="បានព្យួរ">🟡 បានព្យួរ</option>
+            </select>
             <button class="btn btn-success btn-sm" onclick="openAddStaff()"><i class="fas fa-plus"></i>បន្ថែមបុគ្គលិក</button>
             <button class="btn btn-primary btn-sm" onclick="printStaff()"><i class="fas fa-print"></i>Print</button>
             <button class="btn btn-outline btn-sm" onclick="exportStaffCSV()"><i class="fas fa-file-excel"></i>Export</button>
@@ -370,7 +385,7 @@ tbody tr:last-child td{border-bottom:none;}
           <table id="staffTable">
             <thead><tr>
               <th>ID</th><th>ឈ្មោះ</th><th>ភេទ</th><th>LV</th><th>មុខតំណែង</th>
-              <th>ផ្នែក</th><th>គម្រោង</th><th>ថ្ងៃចូលធ្វើ</th><th>ប្រាក់ខែ</th><th>ទូរស័ព្ទ</th><th>Gmail</th><th>សកម្មភាព</th>
+              <th>ផ្នែក</th><th>គម្រោង</th><th>ថ្ងៃចូលធ្វើ</th><th>ប្រាក់ខែ</th><th>ទូរស័ព្ទ</th><th>Gmail</th><th>ស្ថានភាព</th><th>សកម្មភាព</th>
             </tr></thead>
             <tbody id="staffBody"></tbody>
           </table>
@@ -640,6 +655,13 @@ tbody tr:last-child td{border-bottom:none;}
         <div class="form-group"><label>ឈ្មោះ</label><input type="text" id="sf_name" placeholder="ឈ្មោះ"></div>
         <div class="form-group"><label>ភេទ</label><select id="sf_sex"><option>ប្រុស</option><option>ស្រី</option></select></div>
         <div class="form-group"><label>Level (LV)</label><input type="text" id="sf_lv" placeholder="LV1"></div>
+        <div class="form-group"><label>🔖 ស្ថានភាពការងារ</label>
+          <select id="sf_emp_status" style="padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;color:var(--text);width:100%;">
+            <option value="កំពុងធ្វើការ">🟢 កំពុងធ្វើការ</option>
+            <option value="បានឈប់">🔴 បានឈប់</option>
+            <option value="បានព្យួរ">🟡 បានព្យួរ</option>
+          </select>
+        </div>
         <div class="form-group"><label>មុខតំណែង</label><input type="text" id="sf_position" placeholder="មុខតំណែង"></div>
         <div class="form-group"><label>ផ្នែក</label><select id="sf_dept"></select></div>
         <div class="form-group"><label>គម្រោង</label><select id="sf_project"></select></div>
@@ -914,7 +936,7 @@ tbody tr:last-child td{border-bottom:none;}
 // ========== CONFIG ==========
 const SHEET_ID = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const API_KEY = ''; // Optional: add Google API key for public sheets
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyjVVaC0rbgsWwxc6L25Yx_rJxf7w8T3oSESkgBRy6DdNDhLswcVl481u27c2evg1HM/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMbxxSDCzqQtmETibjpggQ8PUGocn0n3j1zhbUBoRyQhr0jf71V-J0gksnVG_Sl9Ms/exec';
 
 // Sheet names
 const SHEETS = {
@@ -1029,7 +1051,7 @@ function setCurrentDate() {
 
 const SHEET_HEADERS = {
   User:       ['Username','Password','Name','Role','Email'],
-  StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber','Photo','Phone'],
+  StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber','Photo','Phone','EmploymentStatus'],
   Attendance: ['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date'],
   StaffLeave: ['ID','Name','TypeOfLeave','StartDate','EndDate','Days','Reason','Status'],
   Project:    ['ProjectID','ProjectName','Location','Latitude','Longitude','Radius','Status'],
@@ -1185,6 +1207,8 @@ async function loadAllData() {
     fetchSheet('Food')
     ]);
 
+    // Default EmploymentStatus for existing staff without the field
+    if (staffData) staffData.forEach(s => { if (!s.EmploymentStatus) s.EmploymentStatus = 'កំពុងធ្វើការ'; });
     console.log('[HR] StaffInfo rows:', staffData ? staffData.length : 0);
     console.log('[HR] Attendance rows:', attData ? attData.length : 0);
     console.log('[HR] StaffLeave rows:', leaveData ? leaveData.length : 0);
@@ -1311,7 +1335,13 @@ function populateSelects() {
 // ========== DASHBOARD ==========
 function loadDashboard() {
   const selDate = document.getElementById('dashDate').value;
-  // Count unique staff who checked in today (deduplicate by ID)
+
+  // Active staff only (EmploymentStatus = "កំពុងធ្វើការ" or not set)
+  const activeStaff = appData.staff.filter(s =>
+    !s.EmploymentStatus || s.EmploymentStatus === 'កំពុងធ្វើការ');
+  const activeIds = activeStaff.map(s => String(s.ID).trim());
+
+  // CheckIn / CheckOut for selected date
   const ciToday = (appData.checkin||[]).filter(c => {
     const d = String(c.Date||c.Timestamp||'').split('T')[0];
     return !selDate || d === selDate;
@@ -1321,29 +1351,112 @@ function loadDashboard() {
     return !selDate || d === selDate;
   });
 
-  // Unique IDs only (deduplicate — 1 staff may scan multiple times)
-  const uniqueCI = [...new Set(ciToday.map(c => String(c.ID||c.Gmail||'').trim()).filter(Boolean))];
-  const uniqueCO = [...new Set(coToday.map(c => String(c.ID||c.Gmail||'').trim()).filter(Boolean))];
+  // Unique IDs (deduplicate)
+  const uniqueCI = [...new Set(ciToday.map(c => String(c.ID||'').trim()).filter(Boolean))];
+  const uniqueCO = [...new Set(coToday.map(c => String(c.ID||'').trim()).filter(Boolean))];
 
-  // Also from Attendance sheet (fallback)
+  // Attendance sheet fallback
   const todayAtt = appData.attendance.filter(a => !selDate || a.Date === selDate || !a.Date);
-  const attPresent = [...new Set(todayAtt.filter(a=>['Present','Late','CheckedOut'].includes(a.Status)).map(a=>a.ID))];
+  const attPresent  = [...new Set(todayAtt.filter(a=>['Present','Late','CheckedOut'].includes(a.Status)).map(a=>a.ID))];
   const attCheckout = [...new Set(todayAtt.filter(a=>a.CheckOut&&a.CheckOut!=='-').map(a=>a.ID))];
+  const attLeave    = [...new Set(todayAtt.filter(a=>a.Status==='Leave').map(a=>a.ID))];
 
-  // Use VLookup approach: count staff from StaffInfo who have checkin record
-  const staffIds = appData.staff.map(s => String(s.ID).trim());
-  const present  = staffIds.filter(id => uniqueCI.includes(id) || attPresent.includes(id)).length;
-  const checkOut = staffIds.filter(id => uniqueCO.includes(id) || attCheckout.includes(id)).length;
-  // Absent = Staff with no CheckIn record today
-  const totalStaff = appData.staff.length;
-  const onLeave = [...new Set(todayAtt.filter(a=>a.Status==='Leave').map(a=>a.ID))].length;
-  const absent  = Math.max(0, totalStaff - present - onLeave);
-  document.getElementById('statTotal').textContent = appData.staff.length;
-  document.getElementById('statIn').textContent = present;
-  document.getElementById('statOut').textContent = checkOut;
-  document.getElementById('statAbsent').textContent = absent;
-  document.getElementById('statLeave').textContent = onLeave;
-  document.getElementById('statProject').textContent = appData.project.filter(p => p.Status === 'Active').length;
+  // Count against ACTIVE staff only
+  const totalCI  = uniqueCI.length || attPresent.length;
+  const totalCO  = uniqueCO.length || attCheckout.length;
+  const onLeave  = attLeave.filter(id => activeIds.includes(id)).length;
+  const present  = activeIds.filter(id => uniqueCI.includes(id) || attPresent.includes(id)).length;
+  const absent   = Math.max(0, activeIds.length - present - onLeave);
+  const activeProjects = appData.project.filter(p => p.Status === 'Active').length;
+
+  document.getElementById('statTotal').textContent   = activeIds.length;
+  document.getElementById('statIn').textContent      = totalCI;
+  document.getElementById('statOut').textContent     = totalCO;
+  document.getElementById('statAbsent').textContent  = absent;
+  document.getElementById('statLeave').textContent   = onLeave;
+  document.getElementById('statProject').textContent = activeProjects;
+
+  // ── Dashboard Chart Table ──
+  renderDashboardTable(selDate, activeIds, totalCI, totalCO, onLeave);
+}
+
+function renderDashboardTable(selDate, activeIds, totalCI, totalCO, totalLeave) {
+  const el = document.getElementById('dashChartContent');
+  if (!el) return;
+
+  // Per-project breakdown
+  const projects = appData.project.filter(p => p.Status === 'Active');
+  if (!projects.length) {
+    el.innerHTML = '<p style="color:var(--text2);text-align:center;padding:20px;">គ្មានគម្រោង Active</p>';
+    return;
+  }
+
+  const ciToday = (appData.checkin||[]).filter(c => {
+    const d = String(c.Date||c.Timestamp||'').split('T')[0];
+    return !selDate || d === selDate;
+  });
+  const coToday = (appData.checkout||[]).filter(c => {
+    const d = String(c.Date||c.Timestamp||'').split('T')[0];
+    return !selDate || d === selDate;
+  });
+  const todayAtt = (appData.attendance||[]).filter(a => !selDate || a.Date === selDate);
+
+  const rows = projects.map(p => {
+    const pName = p.ProjectName || '';
+    const pStaff = appData.staff.filter(s =>
+      (s.ProjectName||'').trim() === pName &&
+      (!s.EmploymentStatus || s.EmploymentStatus === 'កំពុងធ្វើការ'));
+    const pIds = pStaff.map(s => String(s.ID).trim());
+
+    const pCI = [...new Set(ciToday.filter(c=>pIds.includes(String(c.ID||'').trim())).map(c=>c.ID))].length;
+    const pCO = [...new Set(coToday.filter(c=>pIds.includes(String(c.ID||'').trim())).map(c=>c.ID))].length;
+    const pLeave = [...new Set(todayAtt.filter(a=>pIds.includes(String(a.ID||'').trim())&&a.Status==='Leave').map(a=>a.ID))].length;
+    const pTotal = pIds.length;
+
+    const pct = pTotal > 0 ? Math.round(pCI/pTotal*100) : 0;
+    const barColor = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+
+    return `<tr>
+      <td style="padding:10px 14px;font-weight:600;">${pName}</td>
+      <td style="padding:10px 14px;text-align:center;color:var(--text2);">${pTotal}</td>
+      <td style="padding:10px 14px;text-align:center;color:#10b981;font-weight:700;">${pCI}</td>
+      <td style="padding:10px 14px;text-align:center;color:#f59e0b;font-weight:700;">${pCO}</td>
+      <td style="padding:10px 14px;text-align:center;color:#8b5cf6;font-weight:700;">${pLeave}</td>
+      <td style="padding:10px 14px;">
+        <div style="background:#e5e7eb;border-radius:20px;height:8px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:${barColor};border-radius:20px;transition:.3s;"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-top:3px;text-align:right;">${pct}%</div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--bg);">
+            <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;">គម្រោង</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;color:var(--text2);font-size:12px;">បុគ្គលិក</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;color:#10b981;font-size:12px;">🟢 Check In</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;color:#f59e0b;font-size:12px;">🟡 Check Out</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;color:#8b5cf6;font-size:12px;">📅 ឈប់សម្រាក</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--text2);font-size:12px;min-width:120px;">វត្តមាន %</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr style="background:var(--primary);color:#fff;font-weight:700;">
+            <td style="padding:10px 14px;">🏆 សរុប</td>
+            <td style="padding:10px 14px;text-align:center;">${activeIds.length}</td>
+            <td style="padding:10px 14px;text-align:center;">${totalCI}</td>
+            <td style="padding:10px 14px;text-align:center;">${totalCO}</td>
+            <td style="padding:10px 14px;text-align:center;">${totalLeave}</td>
+            <td style="padding:10px 14px;"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
 }
 
 // ========== PAGES ==========
@@ -1375,6 +1488,8 @@ function renderStaff(data) {
   // Apply project filter
   const projFilter = (document.getElementById('staffProjectFilter')||{}).value || '';
   if (projFilter) staffFiltered = staffFiltered.filter(s => (s.ProjectName||'').trim() === projFilter);
+  const statusFilter = (document.getElementById('staffStatusFilter')||{}).value || '';
+  if (statusFilter) staffFiltered = staffFiltered.filter(s => (s.EmploymentStatus||'កំពុងធ្វើការ') === statusFilter);
   const q = document.getElementById('staffSearch')?.value.toLowerCase() || '';
   if (q) staffFiltered = staffFiltered.filter(s =>
     Object.values(s).some(v => String(v).toLowerCase().includes(q)));
@@ -1395,6 +1510,11 @@ function renderStaff(data) {
       <td>$${Number(s.Salary||0).toLocaleString()}</td>
       <td>${displayPhone(s.Phone)}</td>
       <td>${s.Gmail||''}</td>
+      <td>${(()=>{
+        const es=s.EmploymentStatus||'កំពុងធ្វើការ';
+        const cfg={'កំពុងធ្វើការ':'badge-green','បានឈប់':'badge-red','បានព្យួរ':'badge-amber'};
+        return '<span class="badge '+(cfg[es]||'badge-gray')+'">'+es+'</span>';
+      })()}</td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openAddStaff('${s.ID}')" title="កែប្រែ"><i class="fas fa-edit"></i></button>
         <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="event.stopPropagation();deleteStaff('${s.ID}')" title="លុប"><i class="fas fa-trash"></i></button>
@@ -1490,8 +1610,8 @@ function openAddStaff(id) {
     if (s) {
       const fieldMap = {id:'ID',name:'Name',sex:'Sex',lv:'LV',position:'Position',
         dob:'DateOfBirth',start:'StartingDate',salary:'Salary',gmail:'Gmail',
-        bank:'BankName',bankno:'BankNumber',photo:'Photo',phone:'Phone'};
-      ['id','name','sex','lv','position','dob','start','salary','gmail','bank','bankno','photo','phone'].forEach(f => {
+        bank:'BankName',bankno:'BankNumber',photo:'Photo',phone:'Phone',emp_status:'EmploymentStatus'};
+      ['id','name','sex','lv','position','dob','start','salary','gmail','bank','bankno','photo','phone','emp_status'].forEach(f => {
         const el = document.getElementById('sf_'+f);
         if (el) el.value = s[fieldMap[f]] || '';
       });
@@ -1505,6 +1625,8 @@ function openAddStaff(id) {
     // Clear all fields for new staff
     document.getElementById('staffFormModal').querySelectorAll('input,select,textarea').forEach(el => el.value = '');
     document.getElementById('sf_id').value = 'L-' + String(appData.staff.length + 1).padStart(5,'0');
+    const empStatusEl = document.getElementById('sf_emp_status');
+    if (empStatusEl) empStatusEl.value = 'កំពុងធ្វើការ';
   }
   openModal('staffFormModal');
   // Format phone field after loading
@@ -1539,6 +1661,7 @@ async function saveStaff() {
     BankNumber: document.getElementById('sf_bankno').value,
     Photo: document.getElementById('sf_photo').value,
     Phone: document.getElementById('sf_phone') ? document.getElementById('sf_phone').value : '',
+    EmploymentStatus: document.getElementById('sf_emp_status') ? document.getElementById('sf_emp_status').value : 'កំពុងធ្វើការ',
   };
   if (!row.ID || !row.Name) { showToast('⚠️ សូមបញ្ចូល ID និង ឈ្មោះ', 'warning'); return; }
   // ID = Primary Key: check duplicate only for NEW staff
@@ -1815,6 +1938,51 @@ function calcDays(s, e) {
   return Math.max(1, Math.round((new Date(e) - new Date(s)) / 86400000) + 1);
 }
 
+// ══ Attendance History — Time Formatter ══
+// Root cause: Google Sheets sends Time-only cells as bare "1899-12-30" (no time part).
+// Real time lives in the Timestamp ISO field e.g. "2026-04-29T08:08:03.631Z".
+function formatTime(val) {
+  if (!val || val === '-' || val === '') return '-';
+  const s = String(val).trim();
+  // Bare date only — no time → invalid
+  if (/^1899-12-30$/.test(s) || /^\d{4}-\d{2}-\d{2}$/.test(s)) return '-';
+  // "1899-12-30T07:15:00Z" or "1899-12-30 07:15"
+  if (s.startsWith('1899-12-30T') || s.startsWith('1899-12-30 ')) {
+    const tPart = s.split('T')[1] || s.split(' ')[1] || '';
+    if (tPart) return tPart.substring(0, 5);
+  }
+  // Any real ISO datetime "2026-04-29T08:08:03.631Z"
+  if (s.includes('T') && s.length > 10) {
+    try {
+      const d = new Date(s);
+      if (!isNaN(d)) return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    } catch(e) {}
+  }
+  // Already "HH:MM" or "HH:MM:SS"
+  if (/^\d{1,2}:\d{2}/.test(s)) return s.substring(0, 5);
+  // Sheets numeric fraction 0.0–0.9999
+  const n = parseFloat(s);
+  if (!isNaN(n) && n >= 0 && n < 1) {
+    const totalMin = Math.round(n * 24 * 60);
+    return String(Math.floor(totalMin/60)).padStart(2,'0')+':'+String(totalMin%60).padStart(2,'0');
+  }
+  return '-';
+}
+// Extract time from a CheckIn/CheckOut record row:
+// Priority: Time field (if valid) → Timestamp ISO → '-'
+function extractTimeFromRow(r) {
+  if (!r) return '-';
+  const t = formatTime(r.Time || '');
+  if (t !== '-') return t;
+  if (r.Timestamp) {
+    try {
+      const d = new Date(r.Timestamp);
+      if (!isNaN(d)) return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    } catch(e) {}
+  }
+  return '-';
+}
+
 // ══ Attendance History ══
 function showAttHistory(el) {
   const id   = el.dataset ? el.dataset.id   : el;
@@ -1841,23 +2009,28 @@ function showAttHistory(el) {
     const d = normD(r.Date||r.Timestamp);
     if(!d) return;
     if(!dateMap[d]) dateMap[d] = {date:d};
-    if(!dateMap[d].ci || r.Time < dateMap[d].ci) dateMap[d].ci = r.Time||'';
+    const t = extractTimeFromRow(r);
+    if(!dateMap[d].ci || (t !== '-' && t < dateMap[d].ci)) dateMap[d].ci = t;
     dateMap[d].late = r.LateEarly||'';
+    if(!dateMap[d].project && r.ProjectName) dateMap[d].project = r.ProjectName;
   });
   coRecs.forEach(r => {
     const d = normD(r.Date||r.Timestamp);
     if(!d) return;
     if(!dateMap[d]) dateMap[d] = {date:d};
-    if(!dateMap[d].co || r.Time > dateMap[d].co) dateMap[d].co = r.Time||'';
+    const t = extractTimeFromRow(r);
+    if(!dateMap[d].co || (t !== '-' && t > dateMap[d].co)) dateMap[d].co = t;
     dateMap[d].early = r.LateEarly||'';
+    if(!dateMap[d].project && r.ProjectName) dateMap[d].project = r.ProjectName;
   });
   attRecs.forEach(r => {
     const d = normD(r.Date);
     if(!d) return;
     if(!dateMap[d]) dateMap[d] = {date:d};
     dateMap[d].status = r.Status||'';
-    dateMap[d].ci     = dateMap[d].ci || r.CheckIn||'';
-    dateMap[d].co     = dateMap[d].co || r.CheckOut||'';
+    dateMap[d].ci     = dateMap[d].ci || formatTime(r.CheckIn||'');
+    dateMap[d].co     = dateMap[d].co || formatTime(r.CheckOut||'');
+    if(!dateMap[d].project && r.ProjectName) dateMap[d].project = r.ProjectName;
   });
 
   // Sort descending
@@ -1879,14 +2052,18 @@ function showAttHistory(el) {
     tbody.innerHTML = rows.map((r,i) => {
       const bg = i%2===0 ? '#fff' : '#f9fafb';
       const sc = statusColor[r.status] || '#6b7280';
+      const ciDisp = (r.ci && r.ci !== '-') ? r.ci : '-';
+      const coDisp = (r.co && r.co !== '-') ? r.co : '-';
       const note = [r.late, r.early].filter(x=>x&&x!=='OnTime').join(' ');
+      const proj = r.project || '-';
       return `<tr style="background:${bg}">
         <td style="padding:9px 12px;font-weight:600;">${r.date}</td>
-        <td style="padding:9px 12px;text-align:center;color:#10b981;font-weight:600;">${r.ci||'-'}</td>
-        <td style="padding:9px 12px;text-align:center;color:#e07b00;font-weight:600;">${r.co||'-'}</td>
+        <td style="padding:9px 12px;text-align:center;color:#10b981;font-weight:600;">${ciDisp}</td>
+        <td style="padding:9px 12px;text-align:center;color:#e07b00;font-weight:600;">${coDisp}</td>
         <td style="padding:9px 12px;text-align:center;">
           ${r.status ? '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:'+sc+'22;color:'+sc+'">'+r.status+'</span>' : '-'}
         </td>
+        <td style="padding:9px 12px;text-align:center;font-size:12px;color:#6366f1;font-weight:600;">${proj}</td>
         <td style="padding:9px 12px;text-align:center;font-size:11px;color:#f59e0b;">${note||''}</td>
       </tr>`;
     }).join('');
@@ -4391,6 +4568,7 @@ function installPWA() {
             <th style="padding:10px 14px;text-align:center;font-weight:700;color:#10b981;border-bottom:2px solid #e5e7eb;">🟢 ចូល</th>
             <th style="padding:10px 14px;text-align:center;font-weight:700;color:#e07b00;border-bottom:2px solid #e5e7eb;">🟡 ចេញ</th>
             <th style="padding:10px 14px;text-align:center;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;">ស្ថានភាព</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;color:#6366f1;border-bottom:2px solid #e5e7eb;">🏗️ គម្រោង</th>
             <th style="padding:10px 14px;text-align:center;font-weight:700;color:#f59e0b;border-bottom:2px solid #e5e7eb;">ចំណាំ</th>
           </tr>
         </thead>

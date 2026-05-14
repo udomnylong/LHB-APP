@@ -1,15 +1,15 @@
 // ============================================================
-// LHB HR SYSTEM — Google Apps Script v5.1
+// LHB HR SYSTEM — Google Apps Script v5.2
 // ============================================================
 
 const SS_ID              = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const TELEGRAM_TOKEN     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN') || '';
 const TELEGRAM_CHAT      = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT')  || '549942306';
 const TELEGRAM_GROUP     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_Group') || '';
-const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbyjVVaC0rbgsWwxc6L25Yx_rJxf7w8T3oSESkgBRy6DdNDhLswcVl481u27c2evg1HM/exec';
-const FOOD_FOLDER_ID     = '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';           // Food/Report photos
-const STAFF_PHOTO_FOLDER = '1BMeeqss2J_eoU-o8At7Wri-UNDzMO42DW7XzKeanz2vNgPrzJrICf5IL6OgAn6_ulWbS1B8X'; // Staff ID photos
-const FOLDER_ID          = FOOD_FOLDER_ID; // default alias
+const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbwReBXqhqr1hXNbmtN7GjxeEBFW--RzgdatCiUQ2PVwbxV5F-20BMQ9cWAIB5W_Nkd2/exec';
+const FOOD_FOLDER_ID     = '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';
+const STAFF_PHOTO_FOLDER = '1BMeeqss2J_eoU-o8At7Wri-UNDzMO42DW7XzKeanz2vNgPrzJrICf5IL6OgAn6_ulWbS1B8X';
+const FOLDER_ID          = FOOD_FOLDER_ID;
 
 // ============================================================
 // doGet — Read Sheet / Photo
@@ -19,7 +19,6 @@ function doGet(e) {
     var params = e.parameter || {};
     Logger.log('doGet: ' + JSON.stringify(params));
 
-    // ── Get Staff Photo by Staff ID (search in Staff Photo Folder) ──
     if (params.action === 'getStaffPhoto') {
       try {
         var staffId = String(params.staffId || '').trim().toUpperCase();
@@ -28,7 +27,7 @@ function doGet(e) {
         var allFiles = folder.getFiles();
         while (allFiles.hasNext()) {
           var f     = allFiles.next();
-          var fname = f.getName().toUpperCase().replace(/\.[^.]+$/, ''); // strip extension
+          var fname = f.getName().toUpperCase().replace(/\.[^.]+$/, '');
           if (fname === staffId || fname.indexOf(staffId) >= 0 || staffId.indexOf(fname) >= 0) {
             f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
             return respond({ status:'ok', url:'https://lh3.googleusercontent.com/d/' + f.getId(), fileId:f.getId(), name:f.getName() });
@@ -38,7 +37,6 @@ function doGet(e) {
       } catch(pe) { return respond({ status:'error', msg:pe.message }); }
     }
 
-    // ── Get Photo URL by filename ──
     if (params.action === 'getPhotoUrl') {
       try {
         var fileName  = String(params.fileName || '').trim();
@@ -55,7 +53,6 @@ function doGet(e) {
       } catch(de) { return respond({ status:'error', msg:de.message }); }
     }
 
-    // ── Read Sheet ──
     var sheetRaw = String(params.sheet || '').trim();
     var sheet    = (sheetRaw && sheetRaw !== 'undefined' && sheetRaw !== 'null') ? sheetRaw : 'StaffInfo';
     Logger.log('Reading sheet: ' + sheet);
@@ -228,6 +225,21 @@ function doPost(e) {
       return respond({ status:'error', msg:'Row not found: '+keyVal });
     }
 
+    // ── deleteByIdDate ──
+    if (p.action === 'deleteByIdDate') {
+      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName(p.sheet);
+      if (!ws) return respond({ status:'ok', msg:'Sheet not found' });
+      var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
+      var idIdx=headers.indexOf('ID'), dateIdx=headers.indexOf('Date');
+      var deleted=0;
+      for (var i=data.length-1;i>=1;i--){
+        if (String(data[i][idIdx]).trim()===String(p.keyId).trim()&&normDate(data[i][dateIdx])===String(p.keyDate).trim()){
+          ws.deleteRow(i+1); deleted++;
+        }
+      }
+      return respond({ status:'ok', deleted:deleted });
+    }
+
     // ── uploadPhoto ──
     if (p.action === 'uploadPhoto') {
       var folderId = p.folderId || FOOD_FOLDER_ID;
@@ -352,13 +364,15 @@ function respond(obj) {
 }
 
 // ============================================================
-// SETUP HEADERS
+// SETUP HEADERS — v5.2 (EmploymentStatus added)
 // ============================================================
 function setupHeaders() {
-  var ss=SpreadsheetApp.openById(SS_ID);
-  var HEADERS={
+  var ss = SpreadsheetApp.openById(SS_ID);
+  var HEADERS = {
     User:       ['Username','Password','Name','Role','Email','Department','Position'],
-    StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber','Photo','Phone','TelegramChatId','OTP','OTPExpire'],
+    StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName',
+                 'DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber',
+                 'Photo','Phone','EmploymentStatus','TelegramChatId','OTP','OTPExpire'],
     Attendance: ['ID','Name','Position','Department','ProjectName','Date','CheckIn','CheckOut','Late','Early','Status'],
     StaffLeave: ['ID','Name','TypeOfLeave','StartDate','EndDate','Days','Reason','Status'],
     Project:    ['ProjectID','ProjectName','Location','Latitude','Longitude','Radius','Status'],
@@ -369,15 +383,105 @@ function setupHeaders() {
     WorkPlace:  ['Date','Time','ID','Name','Department','ProjectName','Comment','Photo','Status'],
     Comment:    ['Date','Time','ID','Name','Department','ProjectName','Comment','Photo','Status'],
   };
-  for(var name in HEADERS){
-    var headers=HEADERS[name];
-    var ws=ss.getSheetByName(name)||ss.insertSheet(name);
-    var existing=ws.getLastColumn()>0?ws.getRange(1,1,1,ws.getLastColumn()).getValues()[0].map(function(h){return String(h).trim();})  :[];
-    var added=0;
-    headers.forEach(function(h){if(existing.indexOf(h)<0){ws.getRange(1,ws.getLastColumn()+1).setValue(h);existing.push(h);added++;}});
-    Logger.log(name+': '+(added===0?'OK ✅':added+' added ✅'));
+  for (var name in HEADERS) {
+    var headers  = HEADERS[name];
+    var ws       = ss.getSheetByName(name) || ss.insertSheet(name);
+    var lastCol  = ws.getLastColumn();
+    var existing = lastCol > 0
+      ? ws.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h).trim(); })
+      : [];
+    var added = 0;
+    headers.forEach(function(h) {
+      if (existing.indexOf(h) < 0) {
+        ws.getRange(1, ws.getLastColumn() + 1).setValue(h);
+        existing.push(h);
+        added++;
+      }
+    });
+    Logger.log(name + ': ' + (added === 0 ? 'OK ✅' : added + ' column(s) added ✅'));
   }
   Logger.log('setupHeaders() done! ✅');
+}
+
+// ============================================================
+// ADD EmploymentStatus COLUMN + FILL EXISTING STAFF
+// ============================================================
+/**
+ * addEmploymentStatusColumn()
+ *
+ * 1. បន្ថែម column "EmploymentStatus" ទៅ StaffInfo (ប្រសិនបើមិនទាន់មាន)
+ * 2. Fill existing staff rows ទាំងអស់ → "កំពុងធ្វើការ" (ប្រសិនបើ cell ទទេ)
+ *
+ * HOW TO RUN:
+ *   Apps Script Editor → ជ្រើស function "addEmploymentStatusColumn" → ▶ Run
+ */
+function addEmploymentStatusColumn() {
+  var ss = SpreadsheetApp.openById(SS_ID);
+  var ws = ss.getSheetByName('StaffInfo');
+
+  if (!ws) {
+    Logger.log('❌ Sheet "StaffInfo" not found!');
+    return;
+  }
+
+  var lastCol  = ws.getLastColumn();
+  var lastRow  = ws.getLastRow();
+  var headers  = ws.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h).trim(); });
+  var colIndex = headers.indexOf('EmploymentStatus'); // 0-based
+
+  // ── Step 1: Add column header if missing ──
+  if (colIndex < 0) {
+    colIndex = lastCol; // 0-based index of new column
+    ws.getRange(1, lastCol + 1).setValue('EmploymentStatus');
+    Logger.log('✅ Column "EmploymentStatus" added at column ' + (lastCol + 1));
+  } else {
+    Logger.log('ℹ️ Column "EmploymentStatus" already exists at column ' + (colIndex + 1));
+  }
+
+  if (lastRow < 2) {
+    Logger.log('ℹ️ No data rows to fill.');
+    return;
+  }
+
+  // ── Step 2: Fill empty cells → "កំពុងធ្វើការ" ──
+  var sheetColNum = colIndex + 1; // 1-based for getRange
+  var dataRange   = ws.getRange(2, sheetColNum, lastRow - 1, 1);
+  var values      = dataRange.getValues();
+  var filled      = 0;
+
+  for (var i = 0; i < values.length; i++) {
+    if (values[i][0] === '' || values[i][0] === null || values[i][0] === undefined) {
+      values[i][0] = 'កំពុងធ្វើការ';
+      filled++;
+    }
+  }
+
+  dataRange.setValues(values);
+  Logger.log('✅ Filled ' + filled + ' rows with "កំពុងធ្វើការ"');
+  Logger.log('✅ addEmploymentStatusColumn() DONE! Total staff rows: ' + (lastRow - 1));
+
+  // ── Step 3: Apply dropdown validation ──
+  try {
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['កំពុងធ្វើការ', 'បានឈប់', 'បានព្យួរ'], true)
+      .setAllowInvalid(false)
+      .build();
+    ws.getRange(2, sheetColNum, lastRow + 100, 1).setDataValidation(rule);
+    Logger.log('✅ Dropdown validation applied (rows 2 to ' + (lastRow + 100) + ')');
+  } catch(ve) {
+    Logger.log('⚠️ Validation skipped: ' + ve.message);
+  }
+
+  // ── Step 4: Highlight the column header ──
+  try {
+    ws.getRange(1, sheetColNum).setBackground('#d1fae5').setFontColor('#065f46').setFontWeight('bold');
+    Logger.log('✅ Header highlighted green');
+  } catch(he) {
+    Logger.log('⚠️ Highlight skipped: ' + he.message);
+  }
+
+  SpreadsheetApp.flush();
+  Logger.log('🎉 All done! ចុច Refresh hr-system.html ដើម្បីឃើញ EmploymentStatus');
 }
 
 // ============================================================
@@ -399,11 +503,10 @@ function testStaffPhotoFolder() {
   try {
     var folder = DriveApp.getFolderById(STAFF_PHOTO_FOLDER);
     Logger.log('Folder Name: ' + folder.getName());
-    Logger.log('Folder Access: ' + folder.getSharingAccess());
     var files = folder.getFiles(), count = 0;
     while (files.hasNext() && count < 5) {
       var f = files.next();
-      Logger.log('File: ' + f.getName() + ' | ID: ' + f.getId() + ' | lh3: https://lh3.googleusercontent.com/d/' + f.getId());
+      Logger.log('File: ' + f.getName() + ' | lh3: https://lh3.googleusercontent.com/d/' + f.getId());
       count++;
     }
     Logger.log('Total shown: ' + count + ' files');
@@ -412,10 +515,7 @@ function testStaffPhotoFolder() {
 
 function verifyDeployment() {
   Logger.log('=== DEPLOYMENT CHECK ===');
-  Logger.log('WEBHOOK_URL: ' + WEBHOOK_URL);
   Logger.log('SS_ID: ' + SS_ID);
-  Logger.log('FOOD_FOLDER_ID: ' + FOOD_FOLDER_ID);
-  Logger.log('STAFF_PHOTO_FOLDER: ' + STAFF_PHOTO_FOLDER);
   var r=UrlFetchApp.fetch('https://api.telegram.org/bot'+TELEGRAM_TOKEN+'/getWebhookInfo',{muteHttpExceptions:true});
   var cur=JSON.parse(r.getContentText()).result;
   Logger.log('Webhook: '+(cur?cur.url:'none'));
@@ -423,5 +523,5 @@ function verifyDeployment() {
 }
 
 function testSendMessage() {
-  sendTelegramMsg(TELEGRAM_CHAT, 'LHB HR v5.1 Test OK!');
+  sendTelegramMsg(TELEGRAM_CHAT, 'LHB HR v5.2 Test OK!');
 }
