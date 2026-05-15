@@ -30,6 +30,33 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 .screen{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;transition:opacity .25s,transform .25s;}
 .screen.hidden{opacity:0;pointer-events:none;transform:translateY(20px);}
 
+/* ── Pull to Refresh ── */
+#ptrIndicator {
+  position: fixed;
+  top: 0; left: 50%;
+  transform: translateX(-50%) translateY(-80px);
+  z-index: 9999;
+  background: var(--surface2);
+  border-radius: 0 0 24px 24px;
+  padding: 10px 24px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  transition: transform .25s cubic-bezier(.34,1.56,.64,1);
+  pointer-events: none;
+  min-width: 120px;
+}
+#ptrIndicator.ptr-pulling  { transform: translateX(-50%) translateY(0px); }
+#ptrIndicator.ptr-loading  { transform: translateX(-50%) translateY(0px); }
+#ptrIndicator.ptr-done     { transform: translateX(-50%) translateY(-80px); transition: transform .4s ease; }
+.ptr-icon { font-size: 22px; transition: transform .3s; line-height: 1; }
+#ptrIndicator.ptr-ready .ptr-icon { transform: rotate(180deg); }
+#ptrIndicator.ptr-loading .ptr-icon { animation: ptr-spin .7s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+.ptr-label { font-size: 11px; font-weight: 600; color: var(--text2); letter-spacing: .3px; white-space: nowrap; }
+
 /* ── Login Screen ── */
 #loginScreen{background:linear-gradient(160deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);align-items:center;justify-content:center;padding:24px;}
 .login-glow{position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,.2),transparent 70%);top:20%;left:50%;transform:translateX(-50%);}
@@ -250,7 +277,13 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
     </div>
   </div>
 
-  <div class="app-scroll" id="appScroll">
+  <!-- Pull to Refresh Indicator -->
+<div id="ptrIndicator">
+  <div class="ptr-icon">↓</div>
+  <div class="ptr-label" id="ptrLabel">ទាញចុះ Refresh</div>
+</div>
+
+<div class="app-scroll" id="appScroll">
 
     <!-- Profile Card -->
     <div class="profile-section">
@@ -1426,6 +1459,95 @@ if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
     .then(function(r) { console.log('[SW] Registered:', r.scope); })
     .catch(function(e) { console.warn('[SW] Failed:', e); });
 }
+
+// ════════════════════════════════════════════════
+// PULL TO REFRESH
+// ════════════════════════════════════════════════
+(function initPullToRefresh() {
+  const THRESHOLD   = 75;   // px drag needed to trigger refresh
+  const MAX_PULL    = 110;  // max drag distance
+  let startY        = 0;
+  let pulling       = false;
+  let triggered     = false;
+  let currentPull   = 0;
+
+  const indicator   = document.getElementById('ptrIndicator');
+  const label       = document.getElementById('ptrLabel');
+  const scrollEl    = document.getElementById('appScroll');
+  if (!indicator || !scrollEl) return;
+
+  function setIndicator(state, pullPct) {
+    indicator.className = '';
+    if (state === 'pulling') {
+      indicator.classList.add('ptr-pulling');
+      if (pullPct >= 1) {
+        indicator.classList.add('ptr-ready');
+        indicator.querySelector('.ptr-icon').textContent = '↑';
+        label.textContent = 'លែងដើម្បី Refresh';
+      } else {
+        indicator.querySelector('.ptr-icon').textContent = '↓';
+        label.textContent = 'ទាញចុះ Refresh';
+      }
+      // Slide indicator based on pull distance
+      const translateY = Math.min(pullPct * 60, 60) - 80;
+      indicator.style.transform = 'translateX(-50%) translateY(' + translateY + 'px)';
+    } else if (state === 'loading') {
+      indicator.classList.add('ptr-loading');
+      indicator.style.transform = '';
+      indicator.querySelector('.ptr-icon').textContent = '↻';
+      label.textContent = 'កំពុង Refresh...';
+    } else if (state === 'done') {
+      indicator.classList.add('ptr-done');
+      indicator.style.transform = '';
+      indicator.querySelector('.ptr-icon').textContent = '✓';
+      label.textContent = 'Refresh ជោគជ័យ!';
+    } else {
+      indicator.style.transform = '';
+      indicator.querySelector('.ptr-icon').textContent = '↓';
+      label.textContent = 'ទាញចុះ Refresh';
+    }
+  }
+
+  scrollEl.addEventListener('touchstart', function(e) {
+    if (scrollEl.scrollTop > 0) return; // only at top
+    startY   = e.touches[0].clientY;
+    pulling  = true;
+    triggered = false;
+    currentPull = 0;
+  }, { passive: true });
+
+  scrollEl.addEventListener('touchmove', function(e) {
+    if (!pulling) return;
+    if (scrollEl.scrollTop > 2) { pulling = false; return; }
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { pulling = false; return; }
+    currentPull = Math.min(dy * 0.6, MAX_PULL); // dampen pull
+    const pct = currentPull / THRESHOLD;
+    setIndicator('pulling', pct);
+    if (currentPull >= THRESHOLD) triggered = true;
+  }, { passive: true });
+
+  scrollEl.addEventListener('touchend', async function() {
+    if (!pulling) return;
+    pulling = false;
+    if (!triggered || currentPull < THRESHOLD) {
+      setIndicator('reset');
+      return;
+    }
+    // Trigger refresh
+    setIndicator('loading');
+    try {
+      if (currentStaff) {
+        await loadTodayStatus(currentStaff.ID);
+        await loadLeaveBalance(currentStaff.ID);
+      }
+    } catch(e) { console.warn('[PTR] Refresh error:', e); }
+    setIndicator('done');
+    setTimeout(() => setIndicator('reset'), 1500);
+    currentPull = 0;
+    triggered   = false;
+  });
+})();
 
 // ── Auto Sync every 30 seconds ──
 let _syncInterval = null;
