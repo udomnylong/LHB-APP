@@ -421,6 +421,12 @@ tbody tr:last-child td{border-bottom:none;}
             <select id="attProjectFilter" onchange="filterAttendance()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;min-width:130px;">
               <option value="">🏗️ គម្រោងទាំងអស់</option>
             </select>
+            <select id="attCheckFilter" onchange="filterAttendance()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;min-width:185px;">
+              <option value="">📋 ស្ថានភាពទាំងអស់</option>
+              <option value="no_checkin">🔴 មិនបាន Check In</option>
+              <option value="no_checkout">🟡 មិនបាន Check Out</option>
+              <option value="no_both">⚫ មិនបាន Check In &amp; Out</option>
+            </select>
             <div class="search-box"><i class="fas fa-search"></i><input type="text" id="attSearch" placeholder="ស្វែងរក..." oninput="filterAttendance()"></div>
 
             <button class="btn btn-primary btn-sm" onclick="printAttendancePDF()"><i class="fas fa-file-pdf"></i>PDF</button>
@@ -2153,11 +2159,17 @@ function renderAttendance() {
   const selDate = document.getElementById('attDate').value;
   const q = document.getElementById('attSearch')?.value.toLowerCase() || '';
   const projFilter = (document.getElementById('attProjectFilter')||{}).value || '';
+  const checkFilter = (document.getElementById('attCheckFilter')||{}).value || '';
   // Populate project dropdown
   populateProjectFilter('attProjectFilter', appData.staff, 'ProjectName');
 
   // Build attendance — VLookup: StaffInfo + Attendance + CheckIn + CheckOut
-  let data = appData.staff.map(s => {
+  // HIDE employees who have resigned (បានឈប់)
+  const _staffForAtt = appData.staff.filter(s => {
+    const es = String(s.EmpStatus||s.EmploymentStatus||s['ស្ថានភាពការងារ']||s.emp_status||'').trim();
+    return es !== 'បានឈប់';
+  });
+  let data = _staffForAtt.map(s => {
     const sid = String(s.ID).trim();
 
     // From Attendance sheet (main)
@@ -2228,8 +2240,15 @@ function renderAttendance() {
   // Project filter
   const _projF = (document.getElementById('attProjectFilter')||{}).value || '';
   if (_projF) data = data.filter(a => (a.ProjectName||a.project||'').trim() === _projF);
+  // Check In/Out filter
+  const _checkF = (document.getElementById('attCheckFilter')||{}).value || '';
+  if      (_checkF === 'no_checkin')  data = data.filter(a => !a.CheckIn  || a.CheckIn  === '-');
+  else if (_checkF === 'no_checkout') data = data.filter(a => !a.CheckOut || a.CheckOut === '-');
+  else if (_checkF === 'no_both')     data = data.filter(a => (!a.CheckIn||a.CheckIn==='-') && (!a.CheckOut||a.CheckOut==='-'));
   // Search filter
   if (q) data = data.filter(a => Object.values(a).some(v => String(v).toLowerCase().includes(q)));
+  // ── Store full filtered result for PDF/Export to use ──
+  window._lastAttData = data;
   const total = data.length;
   const start = (currentPage.attendance - 1) * PER_PAGE;
   const page = data.slice(start, start + PER_PAGE);
@@ -3622,95 +3641,126 @@ function generateReport() {
 
 // ========== PDF PRINT ==========
 function printAttendancePDF() {
-  const selDate = document.getElementById('attDate').value || new Date().toISOString().split('T')[0];
+  // ── Use the currently filtered data from renderAttendance ──
+  const selDate   = document.getElementById('attDate').value || new Date().toISOString().split('T')[0];
   const projFilter = (document.getElementById('attProjectFilter')||{}).value || '';
-  const sGetter = id => appData.staff.find(s=>String(s.ID).trim()===id) || {};
+  const checkFilter = (document.getElementById('attCheckFilter')||{}).value || '';
+  const searchQ    = (document.getElementById('attSearch')||{}).value || '';
 
-  // FIX: Filter only active staff (Status=កំពុងធ្វើការ) + Project filter
-  let printStaff = appData.staff.filter(s => (s.EmploymentStatus||'កំពុងធ្វើការ') === 'កំពុងធ្វើការ');
-  if (projFilter) printStaff = printStaff.filter(s => (s.ProjectName||'').trim() === projFilter);
+  // Use the last-rendered filtered data (set by renderAttendance → window._lastAttData)
+  const filteredData = window._lastAttData || [];
 
-  // Build same data as renderAttendance
-  let present=0, late=0, absent=0, checkedout=0;
-  const rows = printStaff.map(s => {
-    const sid = String(s.ID).trim();
-    const sGmail = String(s.Gmail||'').toLowerCase().trim();
+  if (!filteredData.length) {
+    showToast('⚠️ គ្មានទិន្នន័យដែល Filter ត្រូវ Print!', 'warning');
+    return;
+  }
 
-    const ciRows = (appData.checkin||[]).filter(c=>{
-      const cid=(String(c.ID||'').trim().toUpperCase());
-      const cg=(String(c.Gmail||'').toLowerCase().trim());
-      const cd=(String(c.Date||c.Timestamp||'')).split('T')[0];
-      return cd===selDate&&(cid===sid||(sGmail&&cg===sGmail));
-    });
-    const coRows = (appData.checkout||[]).filter(c=>{
-      const cid=(String(c.ID||'').trim().toUpperCase());
-      const cg=(String(c.Gmail||'').toLowerCase().trim());
-      const cd=(String(c.Date||c.Timestamp||'')).split('T')[0];
-      return cd===selDate&&(cid===sid||(sGmail&&cg===sGmail));
-    });
-    const ciRow = ciRows[0]||null;
-    const coRow = coRows[coRows.length-1]||null;
-    const attRow = appData.attendance.find(a=>String(a.ID).trim()===sid&&a.Date===selDate);
+  // Count summary
+  let present = 0, late = 0, absent = 0, checkedout = 0, leave = 0;
+  filteredData.forEach(a => {
+    if      (a.Status === 'Present')    present++;
+    else if (a.Status === 'Late')       { present++; late++; }
+    else if (a.Status === 'CheckedOut') checkedout++;
+    else if (a.Status === 'Leave')      leave++;
+    else                                absent++;
+  });
 
-    const extractT = r => {
-      if(!r) return null;
-      if(r.Time&&/\d{1,2}:\d{2}/.test(r.Time)) return r.Time;
-      if(r.Timestamp){try{const d=new Date(r.Timestamp);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}catch(e){}}
-      return null;
-    };
-    const checkIn  = extractT(ciRow)||(attRow?attRow.CheckIn||null:null)||'-';
-    const checkOut = extractT(coRow)||(attRow?attRow.CheckOut||null:null)||'-';
-    const lateVal  = (ciRow&&ciRow.LateEarly)||(attRow?attRow.Late:'')||'';
-    let status = 'Absent';
-    if(ciRow||checkIn!=='-'){status=lateVal&&lateVal.includes('Late')?'Late':'Present';}
-    if(coRow||checkOut!=='-') status='CheckedOut';
-    if(attRow&&attRow.Status==='Leave') status='Leave';
+  // Build filter label for subtitle
+  const checkFilterLabel = {
+    '': '',
+    'no_checkin':  ' | Filter: 🔴 មិនបាន Check In',
+    'no_checkout': ' | Filter: 🟡 មិនបាន Check Out',
+    'no_both':     ' | Filter: ⚫ មិនបាន Check In & Out'
+  }[checkFilter] || '';
+  const searchLabel = searchQ ? ` | ស្វែងរក: "${searchQ}"` : '';
+  const projLabel   = projFilter ? ` | គម្រោង: ${projFilter}` : '';
 
-    if(status==='Present') present++;
-    else if(status==='Late'){present++;late++;}
-    else if(status==='CheckedOut') checkedout++;
-    else absent++;
+  const sc = {Present:'#059669', Late:'#d97706', Absent:'#ef4444', CheckedOut:'#2563a8', Leave:'#8b5cf6'};
 
-    const sc={Present:'#059669',Late:'#d97706',Absent:'#ef4444',CheckedOut:'#2563a8',Leave:'#8b5cf6'};
-    return `<tr>
-      <td><strong>${s.ID}</strong></td><td>${s.Name}</td>
-      <td>${s.Position||''}</td><td>${s.Department||''}</td><td>${s.ProjectName||''}</td>
-      <td style="color:#059669;font-weight:600;">${checkIn}</td>
-      <td style="color:#d97706;font-weight:600;">${checkOut}</td>
-      <td style="color:#ef4444;font-size:12px;">${lateVal||'-'}</td>
-      <td><span style="background:${sc[status]||'#64748b'};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;">${status}</span></td>
-    </tr>`;
-  }).join('');
-  const w = window.open('','_blank','width=1100,height=700');
+  const rows = filteredData.map(a => `<tr>
+    <td><strong>${a.ID||''}</strong></td>
+    <td>${a.Name||''}</td>
+    <td>${a.Position||''}</td>
+    <td>${a.Department||''}</td>
+    <td>${a.ProjectName||''}</td>
+    <td style="color:#059669;font-weight:600;">${a.CheckIn||'-'}</td>
+    <td style="color:#d97706;font-weight:600;">${a.CheckOut||'-'}</td>
+    <td style="color:#ef4444;font-size:12px;">${a.Late && a.Late!=='-' && a.Late!=='OnTime' ? a.Late : (a.Late==='OnTime'?'OnTime':'-')}</td>
+    <td><span style="background:${sc[a.Status]||'#64748b'};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;">${a.Status||'Absent'}</span></td>
+  </tr>`).join('');
+
+  const w = window.open('', '_blank', 'width=1100,height=750');
   w.document.write(`<!DOCTYPE html><html><head>
     <meta charset="UTF-8">
     <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-      body{font-family:'Kantumruy Pro',sans-serif;padding:24px;}
-      h2{color:#1a3c5e;margin-bottom:4px;}p{color:#64748b;font-size:13px;margin-bottom:20px;}
+      *{box-sizing:border-box;margin:0;padding:0;}
+      body{font-family:'Kantumruy Pro',sans-serif;padding:28px;background:#fff;color:#1e293b;}
+      .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;border-bottom:2.5px solid #1a3c5e;padding-bottom:14px;}
+      .header-left h2{font-size:20px;color:#1a3c5e;margin-bottom:4px;}
+      .header-left p{font-size:12px;color:#64748b;line-height:1.6;}
+      .header-right{font-size:11px;color:#94a3b8;text-align:right;}
+      .summary{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+      .summary-card{padding:8px 16px;border-radius:8px;font-size:13px;border:1px solid;min-width:110px;text-align:center;}
+      .filter-badge{display:inline-block;background:#f0f4f8;border:1px solid #cbd5e1;border-radius:6px;padding:3px 10px;font-size:11px;color:#475569;margin-bottom:14px;}
       table{width:100%;border-collapse:collapse;font-size:12px;}
-      th{background:#1a3c5e;color:#fff;padding:9px 10px;text-align:left;}
-      td{padding:8px 10px;border-bottom:1px solid #e2e8f0;}
-      @media print{body{padding:0;}}
+      thead{position:sticky;top:0;}
+      th{background:#1a3c5e;color:#fff;padding:9px 10px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
+      td{padding:8px 10px;border-bottom:1px solid #e2e8f0;vertical-align:middle;}
+      tbody tr:nth-child(even){background:#f8faff;}
+      tbody tr:hover{background:#eff6ff;}
+      .footer{margin-top:20px;font-size:11px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:10px;}
+      @media print{
+        body{padding:12px;}
+        .no-print{display:none!important;}
+        thead{display:table-header-group;}
+        tr{page-break-inside:avoid;}
+      }
     </style>
   </head><body>
-    <h2>📅 វត្តមាន — ${selDate||'ទាំងអស់'}</h2>
-    <p>សរុបបុគ្គលិក: ${printStaff.length} នាក់${projFilter ? ' | គម្រោង: ' + projFilter : ''} | ថ្ងៃ: ${selDate} | បង្កើត: ${new Date().toLocaleDateString('km-KH')}</p>
-    <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
-      <div style="background:#d1fae5;padding:8px 16px;border-radius:8px;font-size:13px;">🟢 Check In: <strong>${present}</strong></div>
-      <div style="background:#dbeafe;padding:8px 16px;border-radius:8px;font-size:13px;">🔵 Check Out: <strong>${checkedout}</strong></div>
-      <div style="background:#fef3c7;padding:8px 16px;border-radius:8px;font-size:13px;">⚠️ Late: <strong>${late}</strong></div>
-      <div style="background:#fee2e2;padding:8px 16px;border-radius:8px;font-size:13px;">🔴 Absent: <strong>${absent}</strong></div>
+    <div class="header">
+      <div class="header-left">
+        <h2>📅 របាយការណ៍វត្តមាន</h2>
+        <p>
+          ថ្ងៃ: <strong>${selDate}</strong>${projLabel}${checkFilterLabel}${searchLabel}<br>
+          សរុប: <strong>${filteredData.length}</strong> នាក់ | បង្កើត: ${new Date().toLocaleString('km-KH')}
+        </p>
+      </div>
+      <div class="header-right">
+        LHB HR System<br>
+        <span style="font-size:10px;">${new Date().toLocaleDateString('en-GB')}</span>
+      </div>
     </div>
+
+    ${checkFilterLabel || searchLabel ? `<div class="filter-badge">🔎 Filter សកម្ម: ${checkFilterLabel.replace(' | Filter: ','')}${searchLabel}</div>` : ''}
+
+    <div class="summary">
+      <div class="summary-card" style="background:#d1fae5;border-color:#a7f3d0;color:#065f46;">🟢 Present<br><strong style="font-size:20px;">${present}</strong></div>
+      <div class="summary-card" style="background:#dbeafe;border-color:#bfdbfe;color:#1e40af;">🔵 CheckedOut<br><strong style="font-size:20px;">${checkedout}</strong></div>
+      <div class="summary-card" style="background:#fef3c7;border-color:#fde68a;color:#92400e;">⚠️ Late<br><strong style="font-size:20px;">${late}</strong></div>
+      <div class="summary-card" style="background:#fee2e2;border-color:#fca5a5;color:#991b1b;">🔴 Absent<br><strong style="font-size:20px;">${absent}</strong></div>
+      ${leave ? `<div class="summary-card" style="background:#ede9fe;border-color:#c4b5fd;color:#5b21b6;">🟣 Leave<br><strong style="font-size:20px;">${leave}</strong></div>` : ''}
+    </div>
+
     <table>
-      <thead><tr><th>ID</th><th>ឈ្មោះ</th><th>មុខតំណែង</th><th>ផ្នែក</th><th>គម្រោង</th><th>Check In</th><th>Check Out</th><th>Late/Early</th><th>ស្ថានភាព</th></tr></thead>
+      <thead>
+        <tr>
+          <th>ID</th><th>ឈ្មោះ</th><th>មុខតំណែង</th><th>ផ្នែក</th><th>គម្រោង</th>
+          <th>Check In</th><th>Check Out</th><th>Late/Early</th><th>ស្ថានភាព</th>
+        </tr>
+      </thead>
       <tbody>${rows}</tbody>
     </table>
-    <script>window.onload=()=>{window.print();}<\/script>
-  
-</body></html>`);
+
+    <div class="footer">
+      LHB HR Management System · Generated ${new Date().toLocaleString('en-GB')} · Total: ${filteredData.length} records
+    </div>
+
+    <script>window.onload = () => { window.print(); }<\/script>
+  </body></html>`);
   w.document.close();
 }
+
 function printLeavePDF() {
   const statusColor = {Approved:'#059669',Pending:'#d97706',Rejected:'#ef4444'};
   const rows = appData.leave.map(l=>`<tr>
@@ -3878,7 +3928,14 @@ function exportStaffCSV() {
   downloadCSV(toCSV(staffFiltered, ['ID','Name','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber']), 'staff.csv');
 }
 function exportAttCSV() {
-  downloadCSV(toCSV(appData.attendance, ['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date']), 'attendance.csv');
+  // Export exactly what is currently displayed (respects all active filters)
+  const filteredData = window._lastAttData || [];
+  if (filteredData.length > 0) {
+    downloadCSV(toCSV(filteredData, ['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date']), 'attendance_filtered.csv');
+    showToast('✅ Export ' + filteredData.length + ' rows (filtered)', 'success');
+  } else {
+    downloadCSV(toCSV(appData.attendance, ['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date']), 'attendance.csv');
+  }
 }
 function exportReportCSV() {
   downloadCSV(toCSV(appData.staff, ['ID','Name','Department','Position','Salary']), 'report.csv');
