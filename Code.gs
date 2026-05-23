@@ -6,7 +6,7 @@ const SS_ID              = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const TELEGRAM_TOKEN     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN') || '';
 const TELEGRAM_CHAT      = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT')  || '549942306';
 const TELEGRAM_GROUP     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_Group') || '';
-const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbwReBXqhqr1hXNbmtN7GjxeEBFW--RzgdatCiUQ2PVwbxV5F-20BMQ9cWAIB5W_Nkd2/exec';
+const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbzJUpZkxOdYLZNaiML2Z6F5koygV3iuXyMOnErhDg5V-Ug-_oEJiH2RQDUjewaKwT4b/exec';
 const FOOD_FOLDER_ID     = '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';
 const STAFF_PHOTO_FOLDER = '1BMeeqss2J_eoU-o8At7Wri-UNDzMO42DW7XzKeanz2vNgPrzJrICf5IL6OgAn6_ulWbS1B8X';
 const FOLDER_ID          = FOOD_FOLDER_ID;
@@ -269,7 +269,10 @@ function doPost(e) {
       var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName(p.sheet);
       if (!ws) return respond({ status:'error', msg:'Sheet not found: '+p.sheet });
       var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
-      var idIdx=headers.indexOf('ID'), keyVal=String(p.keyValue||p.id||'').trim();
+      var keyField=String(p.keyField||'ID').trim();
+      var idIdx=headers.indexOf(keyField);
+      if (idIdx<0) idIdx=headers.indexOf('ID'); // fallback
+      var keyVal=String(p.keyValue||p.id||'').trim();
       for (var i=1;i<data.length;i++){
         if (String(data[i][idIdx]).trim()===keyVal){
           var row=p.data||{};
@@ -277,7 +280,7 @@ function doPost(e) {
           return respond({ status:'ok' });
         }
       }
-      return respond({ status:'error', msg:'Row not found' });
+      return respond({ status:'error', msg:'Row not found: '+keyVal+' in '+keyField });
     }
 
     // ── delete ──
@@ -285,11 +288,14 @@ function doPost(e) {
       var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName(p.sheet);
       if (!ws) return respond({ status:'error', msg:'Sheet not found: '+p.sheet });
       var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
-      var idIdx=headers.indexOf('ID'), keyVal=String(p.keyValue||p.id||'').trim();
+      var keyField=String(p.keyField||'ID').trim();
+      var idIdx=headers.indexOf(keyField);
+      if (idIdx<0) idIdx=headers.indexOf('ID'); // fallback
+      var keyVal=String(p.keyValue||p.id||'').trim();
       for (var i=data.length-1;i>=1;i--){
         if (String(data[i][idIdx]).trim()===keyVal){ws.deleteRow(i+1);return respond({ status:'ok' });}
       }
-      return respond({ status:'error', msg:'Row not found: '+keyVal });
+      return respond({ status:'error', msg:'Row not found: '+keyVal+' in '+keyField });
     }
 
     // ── deleteByIdDate ──
@@ -507,7 +513,7 @@ function setupHeaders() {
   var HEADERS = {
     User:       ['Username','Password','Name','Role','Email','Department','Position','SessionToken','SessionTime'],
     StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName',
-                 'DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber',
+                 'DateOfBirth','StartingDate','ResignDate','Salary','Gmail','BankName','BankNumber',
                  'Photo','Phone','EmploymentStatus','TelegramChatId','OTP','OTPExpire'],
     Attendance: ['ID','Name','Position','Department','ProjectName','Date','CheckIn','CheckOut','Late','Early','Status'],
     StaffLeave: ['ID','Name','TypeOfLeave','StartDate','EndDate','Days','Reason','Status'],
@@ -518,6 +524,7 @@ function setupHeaders() {
     Food:       ['Date','ID','Name','Sex','Position','ProjectName','Morning','Lunch','Evening','Total','UnitPrice','TotalPrice','PhotoMorning','PhotoLunch','PhotoEvening','Comment','Remark'],
     WorkPlace:  ['Date','Time','ID','Name','Department','ProjectName','Comment','Photo','Status'],
     Comment:    ['Date','Time','ID','Name','Department','ProjectName','Comment','Photo','Status'],
+    EvaluateStaff: ['EvalNo','RequestBy','StaffName','StaffID','DateEvaluate','KPIScore','PreviousSalary','CurrentSalary','ApprovedBy','Remark'],
   };
   for (var name in HEADERS) {
     var headers  = HEADERS[name];

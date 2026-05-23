@@ -319,6 +319,7 @@ tbody tr:last-child td{border-bottom:none;}
       <div class="nav-item" data-page="reports" data-perm="manage" onclick="showPage('reports')"><i class="fas fa-chart-bar"></i>របាយការណ៍</div>
       <div class="nav-section" data-perm-section="manage">មតិ & វិន័យ</div>
       <div class="nav-item" data-page="comment" data-perm="manage" onclick="showPage('comment')"><i class="fas fa-comments"></i>មតិយោបល់</div>
+      <div class="nav-item" data-page="evaluate" data-perm="manage" onclick="showPage('evaluate')"><i class="fas fa-star"></i>វាយតម្លៃបុគ្គលិក</div>
       <div class="nav-item" data-page="workplace" data-perm="manage" onclick="showPage('workplace')"><i class="fas fa-hard-hat"></i>សណ្ដាប់ធ្នាប់</div>
     </nav>
     <div class="sidebar-footer">
@@ -402,7 +403,7 @@ tbody tr:last-child td{border-bottom:none;}
           <table id="staffTable">
             <thead><tr>
               <th>ID</th><th>ឈ្មោះ</th><th>ភេទ</th><th>LV</th><th>មុខតំណែង</th>
-              <th>ផ្នែក</th><th>គម្រោង</th><th>ថ្ងៃចូលធ្វើ</th><th>ប្រាក់ខែ</th><th>ទូរស័ព្ទ</th><th>Gmail</th><th>ស្ថានភាព</th><th>សកម្មភាព</th>
+              <th>ផ្នែក</th><th>គម្រោង</th><th>ថ្ងៃចូលធ្វើ</th><th>ថ្ងៃឈប់</th><th>ប្រាក់ខែ</th><th>ទូរស័ព្ទ</th><th>Gmail</th><th>ស្ថានភាព</th><th>សកម្មភាព</th>
             </tr></thead>
             <tbody id="staffBody"></tbody>
           </table>
@@ -642,6 +643,28 @@ tbody tr:last-child td{border-bottom:none;}
       </div>
     </div>
 
+    <!-- ===== EVALUATE STAFF ===== -->
+    <div id="page-evaluate" class="page-content" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="fas fa-star" style="color:var(--primary);margin-right:8px;"></i>វាយតម្លៃបុគ្គលិក</h3>
+          <div class="toolbar">
+            <input type="text" id="evalSearch" placeholder="ស្វែងរក..." style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;width:180px;" oninput="renderEvaluate()">
+            <input type="date" id="evalDateFilter" onchange="renderEvaluate()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;">
+            <button class="btn btn-success btn-sm" onclick="openAddEvaluate()"><i class="fas fa-plus"></i>វាយតម្លៃ</button>
+            <button class="btn btn-primary btn-sm" onclick="printEvaluatePDF()"><i class="fas fa-file-pdf"></i>PDF</button>
+            <button class="btn btn-outline btn-sm" onclick="exportEvaluateCSV()"><i class="fas fa-file-csv"></i>CSV</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead><tr><th>Eval N°</th><th>Request By</th><th>ឈ្មោះបុគ្គលិក</th><th>ថ្ងៃវាយតម្លៃ</th><th>KPI Score</th><th>ប្រាក់ខែមុន ($)</th><th>ប្រាក់ខែថ្មី ($)</th><th>Approved By</th><th>Remark</th><th>សកម្មភាព</th></tr></thead>
+            <tbody id="evaluateBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== COMMENT ===== -->
     <div id="page-comment" class="page-content" style="display:none;">
       <div class="card">
@@ -750,6 +773,7 @@ tbody tr:last-child td{border-bottom:none;}
         <div class="form-group"><label>គម្រោង</label><select id="sf_project"></select></div>
         <div class="form-group"><label>ថ្ងៃខែឆ្នាំកំណើត</label><input type="date" id="sf_dob"></div>
         <div class="form-group"><label>ថ្ងៃចូលធ្វើការ</label><input type="date" id="sf_start"></div>
+        <div class="form-group"><label>ថ្ងៃឈប់ការ (Resign)</label><input type="date" id="sf_resign"></div>
         <div class="form-group"><label>ប្រាក់ខែ ($)</label><input type="number" id="sf_salary" placeholder="0.00"></div>
         <div class="form-group"><label>Gmail</label><input type="email" id="sf_gmail" placeholder="email@gmail.com"></div>
         <div class="form-group"><label>📱 លេខទូរស័ព្ទ</label>
@@ -926,6 +950,34 @@ tbody tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- Evaluate Staff Modal -->
+<div class="modal-overlay" id="evaluateFormModal">
+  <div class="modal" style="max-width:580px;">
+    <div class="modal-header">
+      <h3 id="evalFormTitle">វាយតម្លៃបុគ្គលិក</h3>
+      <button class="modal-close" onclick="closeModal('evaluateFormModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ev_evalNo">
+      <div class="form-grid">
+        <div class="form-group"><label>Eval N°</label><input type="text" id="ev_evalNoShow" readonly style="background:var(--bg-2);"></div>
+        <div class="form-group"><label>Request By</label><input type="text" id="ev_requestBy" placeholder="ឈ្មោះអ្នកស្នើ"></div>
+        <div class="form-group"><label>បុគ្គលិក</label><select id="ev_staff" onchange="onEvalStaffChange()" style="padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;width:100%;"></select></div>
+        <div class="form-group"><label>ថ្ងៃវាយតម្លៃ</label><input type="date" id="ev_date"></div>
+        <div class="form-group"><label>KPI Score (0-100)</label><input type="number" id="ev_kpi" placeholder="85" min="0" max="100" step="1"></div>
+        <div class="form-group"><label>ប្រាក់ខែមុន ($)</label><input type="number" id="ev_prevSalary" readonly style="background:var(--bg-2);" placeholder="Auto"></div>
+        <div class="form-group"><label>ប្រាក់ខែថ្មី ($)</label><input type="number" id="ev_currSalary" placeholder="ប្រាក់ខែថ្មី" step="0.01"></div>
+        <div class="form-group"><label>Approved By</label><input type="text" id="ev_approvedBy" placeholder="ឈ្មោះអ្នកអនុម័ត"></div>
+        <div class="form-group full"><label>Remark</label><textarea id="ev_remark" rows="2" placeholder="..."></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('evaluateFormModal')">បោះបង់</button>
+      <button class="btn btn-primary" onclick="saveEvaluate()"><i class="fas fa-save"></i>រក្សាទុក</button>
+    </div>
+  </div>
+</div>
+
 <!-- Add OT Modal -->
 <div class="modal-overlay" id="otFormModal">
   <div class="modal" style="max-width:500px;">
@@ -1019,14 +1071,14 @@ tbody tr:last-child td{border-bottom:none;}
 // ========== CONFIG ==========
 const SHEET_ID = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const API_KEY = ''; // Optional: add Google API key for public sheets
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxA_ltXxiDjkY4-OhfGiRs-uom4bnK52ESv9c4gpGyPfPNojKKqj0KhAkzUhUqw_a8e/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzJUpZkxOdYLZNaiML2Z6F5koygV3iuXyMOnErhDg5V-Ug-_oEJiH2RQDUjewaKwT4b/exec';
 
 // Sheet names
 const SHEETS = {
   user: 'User', staff: 'StaffInfo', attendance: 'Attendance',
   leave: 'StaffLeave', project: 'Project', ot: 'StaffOT',
   checkin: 'CheckIn', checkout: 'CheckOut', food: 'Food',
-  comment: 'Comment', workplace: 'Workplace'
+  comment: 'Comment', workplace: 'Workplace', evaluate: 'EvaluateStaff'
 };
 
 // ========== STATE ==========
@@ -1035,7 +1087,7 @@ let appData = {
   staff: [], attendance: [], leave: [], project: [], ot: [],
   payroll: [], departments: ['IT', 'HR', 'Finance', 'Operations', 'Management'],
   users: [], checkin: [], checkout: [], food: [],
-  comment: [], workplace: []
+  comment: [], workplace: [], evaluate: []
 };
 let editingStaffId = null;
 let currentPage = { staff: 1, attendance: 1, leave: 1 };
@@ -1052,7 +1104,7 @@ function parsePermissions(roleStr) {
   const r = String(roleStr||'').trim().toLowerCase();
   // Full access roles
   if (r === 'admin' || r === 'manager') {
-    return { full: true, pages: ['dashboard','staff','attendance','leave','ot','project','structure','food','payroll','slip','reports','comment','workplace'] };
+    return { full: true, pages: ['dashboard','staff','attendance','leave','ot','project','structure','food','payroll','slip','reports','comment','workplace','evaluate'] };
   }
   // Dashboard Only with specific menus
   if (r.includes('dashboard only') || r.includes('menu[')) {
@@ -1444,7 +1496,7 @@ function setCurrentDate() {
 
 const SHEET_HEADERS = {
   User:       ['Username','Password','Name','Role','Email'],
-  StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber','Photo','Phone','EmploymentStatus'],
+  StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','ResignDate','Salary','Gmail','BankName','BankNumber','Photo','Phone','EmploymentStatus'],
   Attendance: ['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date'],
   StaffLeave: ['ID','Name','TypeOfLeave','StartDate','EndDate','Days','Reason','Status'],
   Project:    ['ProjectID','ProjectName','Location','Latitude','Longitude','Radius','Status'],
@@ -1454,6 +1506,7 @@ const SHEET_HEADERS = {
   CheckOut:   ['ID','Name','Gmail','ProjectName','Date','Time','Timestamp','Latitude','Longitude','Accuracy','LateEarly','Minutes','Position','Department'],
   Comment:    ['Date','Time','ID','Name','Department','ProjectName','Comment','Photo','Status'],
   Workplace:  ['Date','Time','ID','Name','Department','ProjectName','Comment','Photo','Status'],
+  EvaluateStaff: ['EvalNo','RequestBy','StaffName','StaffID','DateEvaluate','KPIScore','PreviousSalary','CurrentSalary','ApprovedBy','Remark'],
 };
 
 async function fetchSheet(sheetName) {
@@ -1508,40 +1561,14 @@ async function writeToSheet(sheetName, rowData, action) {
   const hdrs = SHEET_HEADERS[sheetName] || Object.keys(rowData);
   const rowArr = hdrs.map(h => (rowData[h] !== undefined && rowData[h] !== null) ? String(rowData[h]) : '');
   const payload = { action: action, sheet: sheetName, data: rowData, row: rowArr, headers: hdrs };
-  // Use iframe trick to bypass CORS for fire-and-forget POST
-  return new Promise((resolve) => {
-    try {
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = APPS_SCRIPT_URL;
-      form.target = '_sync_iframe_';
-      form.style.display = 'none';
-      const inp = document.createElement('input');
-      inp.type = 'hidden';
-      inp.name = 'payload';
-      inp.value = JSON.stringify(payload);
-      form.appendChild(inp);
-      let iframe = document.getElementById('_sync_iframe_');
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.name = '_sync_iframe_';
-        iframe.id = '_sync_iframe_';
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-      }
-      document.body.appendChild(form);
-      form.submit();
-      document.body.removeChild(form);
-      setTimeout(() => resolve(true), 1000);
-    } catch(e) {
-      // Fallback: no-cors fetch
-      fetch(APPS_SCRIPT_URL, {
-        method: 'POST', mode: 'no-cors',
-        body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'text/plain' }
-      }).finally(() => resolve(true));
-    }
-  });
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors',
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'text/plain' }
+    });
+    return true;
+  } catch(e) { console.warn('[writeToSheet]', e); return false; }
 }
 
 // Delete from sheet by row key
@@ -1590,7 +1617,7 @@ async function loadAllData() {
   showLoading(true);
   try {
     // Load all sheets in parallel via Apps Script doGet
-    const [staffData, attData, leaveData, projectData, otData, usersData, ciData, coData, foodData, commentData, workplaceData] = await Promise.all([
+    const [staffData, attData, leaveData, projectData, otData, usersData, ciData, coData, foodData, commentData, workplaceData, evaluateData] = await Promise.all([
       fetchSheet(SHEETS.staff),
       fetchSheet(SHEETS.attendance),
       fetchSheet(SHEETS.leave),
@@ -1601,7 +1628,8 @@ async function loadAllData() {
       fetchSheet(SHEETS.checkout),
       fetchSheet(SHEETS.food),
       fetchSheet(SHEETS.comment),
-      fetchSheet(SHEETS.workplace)
+      fetchSheet(SHEETS.workplace),
+      fetchSheet(SHEETS.evaluate)
     ]);
 
     // Default EmploymentStatus for existing staff without the field
@@ -1628,6 +1656,7 @@ async function loadAllData() {
     loadFoodPhotos();
     if (commentData && commentData.length > 0) appData.comment = commentData;
     if (workplaceData && workplaceData.length > 0) appData.workplace = workplaceData;
+    if (evaluateData && evaluateData.length > 0) appData.evaluate = evaluateData;
     // Merge CheckIn: Sheet data + local cache (handles case where Sheet not synced yet)
     const _today = new Date().toISOString().split('T')[0];
     const _ciCache = JSON.parse(localStorage.getItem('hr_ci_cache_'+_today)||'[]');
@@ -1924,7 +1953,7 @@ function showPage(page) {
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('page-'+page).style.display = 'block';
   event.currentTarget.classList.add('active');
-  const titles = {dashboard:'Dashboard',staff:'ព័ត៌មានបុគ្គលិក',attendance:'វត្តមាន',leave:'ការឈប់សម្រាក',ot:'ម៉ោងលើស (OT)',project:'គម្រោង',structure:'រចនាសម្ព័ន្ធ',payroll:'ប្រាក់ខែ',slip:'Pay Slip',reports:'របាយការណ៍',comment:'មតិយោបល់',workplace:'សណ្ដាប់ធ្នាប់'};
+  const titles = {dashboard:'Dashboard',staff:'ព័ត៌មានបុគ្គលិក',attendance:'វត្តមាន',leave:'ការឈប់សម្រាក',ot:'ម៉ោងលើស (OT)',project:'គម្រោង',structure:'រចនាសម្ព័ន្ធ',payroll:'ប្រាក់ខែ',slip:'Pay Slip',reports:'របាយការណ៍',comment:'មតិយោបល់',workplace:'សណ្ដាប់ធ្នាប់',evaluate:'វាយតម្លៃបុគ្គលិក'};
   document.getElementById('pageTitle').textContent = titles[page] || page;
   if (page === 'staff') renderStaff();
   if (page === 'attendance') { renderAttendance(); markAttendanceSeen(); }
@@ -1936,6 +1965,7 @@ function showPage(page) {
   if (page === 'workplace') renderWorkplace();
   if (page === 'ot') renderOT();
   if (page === 'payroll') renderPayroll();
+  if (page === 'evaluate') { populateEvalStaffSelect(); renderEvaluate(); }
   if (window.innerWidth <= 768) closeSidebar();
 }
 
@@ -1968,6 +1998,7 @@ function renderStaff(data) {
       <td>${s.Department||''}</td>
       <td>${s.ProjectName||''}</td>
       <td>${formatDateDisplay(s.StartingDate)}</td>
+      <td>${s.ResignDate ? formatDateDisplay(s.ResignDate) : '-'}</td>
       <td>$${Number(s.Salary||0).toLocaleString()}</td>
       <td>${displayPhone(s.Phone)}</td>
       <td>${s.Gmail||''}</td>
@@ -2070,7 +2101,7 @@ function openAddStaff(id) {
     const s = appData.staff.find(x => x.ID === id);
     if (s) {
       const fieldMap = {id:'ID',name:'Name',sex:'Sex',lv:'LV',position:'Position',
-        dob:'DateOfBirth',start:'StartingDate',salary:'Salary',gmail:'Gmail',
+        dob:'DateOfBirth',start:'StartingDate',resign:'ResignDate',salary:'Salary',gmail:'Gmail',
         bank:'BankName',bankno:'BankNumber',photo:'Photo',phone:'Phone',emp_status:'EmploymentStatus'};
       ['id','name','sex','lv','position','dob','start','salary','gmail','bank','bankno','photo','phone','emp_status'].forEach(f => {
         const el = document.getElementById('sf_'+f);
@@ -2116,6 +2147,7 @@ async function saveStaff() {
     ProjectName: document.getElementById('sf_project').value,
     DateOfBirth: document.getElementById('sf_dob').value,
     StartingDate: document.getElementById('sf_start').value,
+    ResignDate: document.getElementById('sf_resign') ? document.getElementById('sf_resign').value : '',
     Salary: document.getElementById('sf_salary').value,
     Gmail: document.getElementById('sf_gmail').value,
     BankName: document.getElementById('sf_bank').value,
@@ -5338,6 +5370,160 @@ async function startTimeoutWatcher() {
 ['click','keydown','mousemove','touchstart','scroll'].forEach(evt => {
   document.addEventListener(evt, resetActivityTimer, {passive:true});
 });
+
+// ========== EVALUATE STAFF ==========
+function populateEvalStaffSelect() {
+  const sel = document.getElementById('ev_staff');
+  if (!sel) return;
+  const active = appData.staff.filter(s => !s.EmploymentStatus || s.EmploymentStatus === 'កំពុងធ្វើការ');
+  sel.innerHTML = '<option value="">-- ជ្រើសរើសបុគ្គលិក --</option>' +
+    active.map(s => `<option value="${s.ID}">${s.Name} (${s.ID})</option>`).join('');
+}
+function onEvalStaffChange() {
+  const staffId = document.getElementById('ev_staff').value;
+  const staff = appData.staff.find(s => s.ID === staffId);
+  document.getElementById('ev_prevSalary').value = staff ? (staff.Salary || '') : '';
+}
+function renderEvaluate() {
+  const q = (document.getElementById('evalSearch') || {}).value || '';
+  const df = (document.getElementById('evalDateFilter') || {}).value || '';
+  let rows = [...(appData.evaluate || [])];
+  if (q) rows = rows.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q.toLowerCase())));
+  if (df) rows = rows.filter(r => (r.DateEvaluate || '').startsWith(df));
+  document.getElementById('evaluateBody').innerHTML = rows.length === 0
+    ? '<tr><td colspan="10" style="text-align:center;color:var(--text-light);padding:32px;">គ្មានទិន្នន័យ</td></tr>'
+    : rows.map((r, i) => {
+        const kpi = Number(r.KPIScore || 0);
+        const kpiColor = kpi >= 80 ? '#16a34a' : kpi >= 60 ? '#d97706' : '#dc2626';
+        const diff = Number(r.CurrentSalary || 0) - Number(r.PreviousSalary || 0);
+        const diffStr = diff > 0 ? `<small style="color:#16a34a;">(+$${diff.toFixed(2)})</small>`
+                      : diff < 0 ? `<small style="color:#dc2626;">(-$${Math.abs(diff).toFixed(2)})</small>` : '';
+        return `<tr ondblclick="showEvalDetail(${i})" style="cursor:pointer;">
+          <td><span class="badge badge-blue">${r.EvalNo||''}</span></td>
+          <td>${r.RequestBy||''}</td>
+          <td style="font-weight:600;">${r.StaffName||''}</td>
+          <td>${formatDateDisplay(r.DateEvaluate)}</td>
+          <td style="text-align:center;font-weight:700;color:${kpiColor};">${r.KPIScore||''}%</td>
+          <td>$${Number(r.PreviousSalary||0).toFixed(2)}</td>
+          <td style="font-weight:600;color:#16a34a;">$${Number(r.CurrentSalary||0).toFixed(2)} ${diffStr}</td>
+          <td>${r.ApprovedBy||''}</td>
+          <td>${r.Remark||'-'}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-outline btn-sm" onclick="openEditEvaluate(${i})"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteEvaluate(${i})"><i class="fas fa-trash"></i></button>
+          </td>
+        </tr>`;
+      }).join('');
+}
+function showEvalDetail(idx) {
+  const r = (appData.evaluate||[])[idx]; if (!r) return;
+  const diff = Number(r.CurrentSalary||0) - Number(r.PreviousSalary||0);
+  alert(['📊 ព័ត៌មានវាយតម្លៃ',`Eval N°: ${r.EvalNo}`,`Request By: ${r.RequestBy}`,
+    `Staff: ${r.StaffName} (${r.StaffID})`,`Date: ${formatDateDisplay(r.DateEvaluate)}`,
+    `KPI Score: ${r.KPIScore}%`,`Previous Salary: $${Number(r.PreviousSalary||0).toFixed(2)}`,
+    `Current Salary: $${Number(r.CurrentSalary||0).toFixed(2)} (${diff>=0?'+':''}$${diff.toFixed(2)})`,
+    `Approved By: ${r.ApprovedBy}`,`Remark: ${r.Remark||'-'}`].join('\n'));
+}
+let _evalEditIdx = -1;
+function openAddEvaluate() {
+  _evalEditIdx = -1;
+  populateEvalStaffSelect();
+  document.getElementById('evalFormTitle').textContent = 'វាយតម្លៃបុគ្គលិក';
+  const nextNo = 'EVAL-' + String((appData.evaluate||[]).length + 1).padStart(4,'0');
+  document.getElementById('ev_evalNo').value = nextNo;
+  document.getElementById('ev_evalNoShow').value = nextNo;
+  document.getElementById('ev_requestBy').value = currentUser ? (currentUser.Name||currentUser.Username||'') : '';
+  ['ev_staff','ev_kpi','ev_prevSalary','ev_currSalary','ev_approvedBy','ev_remark'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('ev_date').value = new Date().toISOString().split('T')[0];
+  openModal('evaluateFormModal');
+}
+function openEditEvaluate(idx) {
+  _evalEditIdx = idx;
+  const r = (appData.evaluate||[])[idx]; if (!r) return;
+  populateEvalStaffSelect();
+  document.getElementById('evalFormTitle').textContent = 'កែប្រែការវាយតម្លៃ';
+  document.getElementById('ev_evalNo').value = r.EvalNo||'';
+  document.getElementById('ev_evalNoShow').value = r.EvalNo||'';
+  document.getElementById('ev_requestBy').value = r.RequestBy||'';
+  document.getElementById('ev_staff').value = r.StaffID||'';
+  document.getElementById('ev_date').value = formatDateInput(r.DateEvaluate);
+  document.getElementById('ev_kpi').value = r.KPIScore||'';
+  document.getElementById('ev_prevSalary').value = r.PreviousSalary||'';
+  document.getElementById('ev_currSalary').value = r.CurrentSalary||'';
+  document.getElementById('ev_approvedBy').value = r.ApprovedBy||'';
+  document.getElementById('ev_remark').value = r.Remark||'';
+  openModal('evaluateFormModal');
+}
+async function saveEvaluate() {
+  const staffId = document.getElementById('ev_staff').value;
+  if (!staffId) { showToast('⚠️ សូមជ្រើសរើសបុគ្គលិក','warning'); return; }
+  const staff = appData.staff.find(s => s.ID === staffId) || {};
+  const evalNo = document.getElementById('ev_evalNo').value;
+  const currSalary = document.getElementById('ev_currSalary').value;
+  const row = {
+    EvalNo: evalNo, RequestBy: document.getElementById('ev_requestBy').value,
+    StaffName: staff.Name||'', StaffID: staffId,
+    DateEvaluate: document.getElementById('ev_date').value,
+    KPIScore: document.getElementById('ev_kpi').value,
+    PreviousSalary: document.getElementById('ev_prevSalary').value,
+    CurrentSalary: currSalary,
+    ApprovedBy: document.getElementById('ev_approvedBy').value,
+    Remark: document.getElementById('ev_remark').value
+  };
+  if (!evalNo) { showToast('⚠️ Eval N° ត្រូវការ','warning'); return; }
+  showLoading(true);
+  if (_evalEditIdx >= 0) {
+    appData.evaluate[_evalEditIdx] = row;
+    await updateInSheet(SHEETS.evaluate, 'EvalNo', row.EvalNo, row);
+    showToast('✅ កែប្រែ + Sync ជោគជ័យ!','success');
+  } else {
+    if (!appData.evaluate) appData.evaluate = [];
+    appData.evaluate.push(row);
+    await writeToSheet(SHEETS.evaluate, row, 'append');
+    showToast('✅ វាយតម្លៃ + Sync ជោគជ័យ!','success');
+  }
+  if (currSalary && Number(currSalary) > 0) {
+    const sidx = appData.staff.findIndex(s => s.ID === staffId);
+    if (sidx >= 0) {
+      appData.staff[sidx].Salary = currSalary;
+      await updateInSheet(SHEETS.staff, 'ID', staffId, { Salary: currSalary });
+    }
+  }
+  showLoading(false); _evalEditIdx = -1;
+  closeModal('evaluateFormModal'); renderEvaluate();
+}
+async function deleteEvaluate(idx) {
+  if (!confirm('តើអ្នកចង់លុបការវាយតម្លៃនេះ?')) return;
+  const row = (appData.evaluate||[])[idx];
+  appData.evaluate.splice(idx, 1);
+  await deleteFromSheet(SHEETS.evaluate, 'EvalNo', row.EvalNo);
+  renderEvaluate(); showToast('🗑️ លុបជោគជ័យ','success');
+}
+function printEvaluatePDF() {
+  const rows = appData.evaluate||[];
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Evaluate Staff</title>
+  <style>body{font-family:Arial,sans-serif;padding:20px;}h2{color:#1e3a5f;}
+  table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:6px 8px;font-size:11px;}
+  th{background:#4f46e5;color:#fff;text-align:center;}tr:nth-child(even){background:#f8f8f8;}</style>
+  </head><body><h2>⭐ វាយតម្លៃបុគ្គលិក</h2><p>សរុប: ${rows.length} | ${new Date().toLocaleDateString('km-KH')}</p>
+  <table><thead><tr><th>Eval N°</th><th>Request By</th><th>ឈ្មោះ</th><th>ថ្ងៃ</th><th>KPI</th><th>ប.ខែមុន</th><th>ប.ខែថ្មី</th><th>Approved By</th><th>Remark</th></tr></thead>
+  <tbody>${rows.map(r=>`<tr><td>${r.EvalNo||''}</td><td>${r.RequestBy||''}</td><td>${r.StaffName||''}</td>
+  <td>${formatDateDisplay(r.DateEvaluate)}</td><td style="text-align:center;">${r.KPIScore||''}%</td>
+  <td>$${Number(r.PreviousSalary||0).toFixed(2)}</td><td>$${Number(r.CurrentSalary||0).toFixed(2)}</td>
+  <td>${r.ApprovedBy||''}</td><td>${r.Remark||''}</td></tr>`).join('')}
+  </tbody></table></body></html>`);
+  w.document.close(); setTimeout(()=>w.print(),500);
+}
+function exportEvaluateCSV() {
+  const rows = appData.evaluate||[];
+  const hdrs = ['EvalNo','RequestBy','StaffName','StaffID','DateEvaluate','KPIScore','PreviousSalary','CurrentSalary','ApprovedBy','Remark'];
+  const csv = [hdrs.join(','),...rows.map(r=>hdrs.map(h=>`"${(r[h]||'').toString().replace(/"/g,'""')}"`).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download = 'EvaluateStaff_'+new Date().toISOString().split('T')[0]+'.csv';
+  a.click(); showToast('✅ Export CSV ជោគជ័យ!','success');
+}
 
 // ========== BOOT ==========
 checkSession();
