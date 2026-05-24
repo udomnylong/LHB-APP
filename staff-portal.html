@@ -1574,65 +1574,73 @@ async function loadHistory(force) {
   if (!list || !currentStaff) return;
   list.innerHTML = '<div class="hist-load"><i class="fas fa-circle-notch spin"></i> កំពុងទាញទិន្នន័យ...</div>';
 
+  // Parse JSON response from Apps Script (handle JSONP prefix)
+  async function fetchSheet(name) {
+    try {
+      const r   = await fetch(SU + '?sheet=' + name + '&t=' + Date.now(), {redirect:'follow'});
+      const txt = await r.text();
+      const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
+      return j.data || [];
+    } catch(e) { console.warn('[History] fetchSheet', name, e); return []; }
+  }
+
   try {
-    const r   = await fetch(SU + '?sheet=CheckIn&t=' + Date.now(), {redirect:'follow'});
-    const txt = await r.text();
-    const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
+    const id  = String(currentStaff.ID||'').trim();
+    const now = new Date();
+    const cut = new Date(now); cut.setDate(cut.getDate()-30);
 
-    const id   = String(currentStaff.ID||'').trim();
-    const now  = new Date();
-    const cut  = new Date(now); cut.setDate(cut.getDate()-30);
+    // ── Fetch CheckIn + CheckOut sheets in parallel ──
+    const [inRows, outRows] = await Promise.all([
+      fetchSheet('CheckIn'),
+      fetchSheet('CheckOut')
+    ]);
 
-    // Filter: this staff, last 30 days
-    const rows = (j.data||[]).filter(x => {
-      if (String(x.ID||'').trim() !== id) return false;
-      const d = new Date(normalizeDate(x.Date));
-      return d >= cut && d <= now;
-    });
+    // Filter helper: only this staff, last 30 days, valid date
+    function filterRows(rows) {
+      return rows.filter(x => {
+        if (String(x.ID||'').trim() !== id) return false;
+        const nd = normalizeDate(x.Date);
+        if (!nd) return false;
+        const dt = new Date(nd);
+        return !isNaN(dt) && dt >= cut && dt <= now;
+      });
+    }
 
-    if (!rows.length) {
-      list.innerHTML = '<div class="hist-empty"><i class="fas fa-inbox"></i>មិនមានទិន្នន័យ 30 ថ្ងៃចុងក្រោយ</div>';
+    const filtIn  = filterRows(inRows);
+    const filtOut = filterRows(outRows);
+
+    // Build date-keyed lookup (take the last record per date if duplicates)
+    const inByDate  = {};
+    filtIn.forEach(x  => { const d = normalizeDate(x.Date);  if (d) inByDate[d]  = x; });
+    const outByDate = {};
+    filtOut.forEach(x => { const d = normalizeDate(x.Date);  if (d) outByDate[d] = x; });
+
+    // Union of all dates that appear in either sheet
+    const allDates = [...new Set([...Object.keys(inByDate), ...Object.keys(outByDate)])]
+                       .sort((a,b) => b.localeCompare(a)); // newest first
+
+    if (!allDates.length) {
+      list.innerHTML = '<div class="hist-empty"><i class="fas fa-inbox"></i><br>មិនមានទិន្នន័យ 30 ថ្ងៃចុងក្រោយ</div>';
       _historyLoaded = true; return;
     }
 
-    // Group by date → { date: { in: row, out: row } }
-    const byDate = {};
-    rows.forEach(x => {
-      const d = normalizeDate(x.Date);
-      if (!d) return; // skip rows with bogus/empty date (time-only cells)
-      if (!byDate[d]) byDate[d] = { in: null, out: null };
-      const tp = (x.Type||x.type||'').toLowerCase();
-      if (tp === 'checkout' || tp === 'check out' || tp === 'out') {
-        if (!byDate[d].out) byDate[d].out = x;
-      } else {
-        if (!byDate[d].in) byDate[d].in = x;
-        // Single-row format: same record has both CheckIn & CheckOut fields
-        if (!byDate[d].out && cleanTime(x.CheckOut||x.TimeOut||x.OutTime||'')) {
-          byDate[d].out = x;
-        }
-      }
-    });
-
-    // Sort dates descending
-    const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
-
-    // Group by month for headers
-    const DOW_KH = ['អាទិត្យ','ច័ន្ទ','អង្គារ','ពុធ','ព្រហស្បតិ៍','សុក្រ','សៅរ៍'];
+    const DOW_KH   = ['អាទិត្យ','ច័ន្ទ','អង្គារ','ពុធ','ព្រហស្បតិ៍','សុក្រ','សៅរ៍'];
     const MONTH_KH = ['មករា','កុម្ភៈ','មីនា','មេសា','ឧសភា','មិថុនា','កក្កដា','សីហា','កញ្ញា','តុលា','វិច្ឆិកា','ធ្នូ'];
 
     let html = '';
     let lastMonth = '';
 
-    dates.forEach(d => {
-      const dt   = new Date(d);
-      const mon  = MONTH_KH[dt.getMonth()] + ' ' + dt.getFullYear();
-      const day  = dt.getDate();
-      const dow  = DOW_KH[dt.getDay()];
-      const rec  = byDate[d];
-      const inT  = findTimeInRow(rec.in,  false);
-      const outT = findTimeInRow(rec.out, true);
-      const cls  = inT && outT ? 'present' : inT ? 'partial' : 'absent';
-      const proj = (rec.in||rec.out||{}).ProjectName || '';
+    allDates.forEach(d => {
+      const inRec  = inByDate[d]  || null;
+      const outRec = outByDate[d] || null;
+      const dt     = new Date(d + 'T00:00:00'); // force local midnight (avoid UTC shift)
+      const mon    = MONTH_KH[dt.getMonth()] + ' ' + dt.getFullYear();
+      const day    = dt.getDate();
+      const dow    = DOW_KH[dt.getDay()];
+      const inT    = findTimeInRow(inRec,  false);
+      const outT   = findTimeInRow(outRec, false); // CheckOut sheet row → time in its own 'Time' field
+      const cls    = inT && outT ? 'present' : inT ? 'partial' : 'absent';
+      const proj   = (inRec||outRec||{}).ProjectName || '';
 
       if (mon !== lastMonth) {
         html += `<div class="hist-month-label">${mon}</div>`;
@@ -1662,7 +1670,7 @@ async function loadHistory(force) {
     list.innerHTML = html;
     _historyLoaded = true;
   } catch(e) {
-    list.innerHTML = '<div class="hist-empty"><i class="fas fa-triangle-exclamation"></i>មានបញ្ហាទាញទិន្នន័យ</div>';
+    list.innerHTML = '<div class="hist-empty"><i class="fas fa-triangle-exclamation"></i><br>មានបញ្ហាទាញទិន្នន័យ</div>';
     console.warn('loadHistory:', e);
   }
 }
