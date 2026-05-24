@@ -1,5 +1,5 @@
 // ============================================================
-// LHB HR SYSTEM — Google Apps Script v5.2
+// LHB HR SYSTEM — Google Apps Script v5.3
 // ============================================================
 
 const SS_ID              = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
@@ -37,7 +37,7 @@ function doGet(e) {
       } catch(pe) { return respond({ status:'error', msg:pe.message }); }
     }
 
-    // ── checkSession via GET (no CORS issue) ──
+    // ── checkSession via GET ──
     if (params.action === 'checkSession') {
       var ss2=SpreadsheetApp.openById(SS_ID), ws2=ss2.getSheetByName('User');
       if (!ws2) return respond({ status:'ok', active:false });
@@ -46,7 +46,7 @@ function doGet(e) {
       if (tIdx2<0||tsIdx2<0) return respond({ status:'ok', active:false });
       var username2=String(params.username||'').trim().toLowerCase();
       var myToken2=String(params.myToken||'').trim();
-      var SESSION_TIMEOUT2=10*60*1000; // 10 min: auto-expire if heartbeat stops (browser closed)
+      var SESSION_TIMEOUT2=10*60*1000;
       for (var i2=1;i2<data2.length;i2++) {
         if (String(data2[i2][uIdx2]||'').trim().toLowerCase()===username2) {
           var tok2=String(data2[i2][tIdx2]||'').trim();
@@ -271,7 +271,7 @@ function doPost(e) {
       var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
       var keyField=String(p.keyField||'ID').trim();
       var idIdx=headers.indexOf(keyField);
-      if (idIdx<0) idIdx=headers.indexOf('ID'); // fallback
+      if (idIdx<0) idIdx=headers.indexOf('ID');
       var keyVal=String(p.keyValue||p.id||'').trim();
       for (var i=1;i<data.length;i++){
         if (String(data[i][idIdx]).trim()===keyVal){
@@ -290,7 +290,7 @@ function doPost(e) {
       var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
       var keyField=String(p.keyField||'ID').trim();
       var idIdx=headers.indexOf(keyField);
-      if (idIdx<0) idIdx=headers.indexOf('ID'); // fallback
+      if (idIdx<0) idIdx=headers.indexOf('ID');
       var keyVal=String(p.keyValue||p.id||'').trim();
       for (var i=data.length-1;i>=1;i--){
         if (String(data[i][idIdx]).trim()===keyVal){ws.deleteRow(i+1);return respond({ status:'ok' });}
@@ -313,7 +313,7 @@ function doPost(e) {
       return respond({ status:'ok', deleted:deleted });
     }
 
-    // ── uploadPhoto ──
+    // ── uploadPhoto — upload file ថ្មីទៅ Drive Folder ──
     if (p.action === 'uploadPhoto') {
       var folderId = p.folderId || FOOD_FOLDER_ID;
       var decoded  = Utilities.base64Decode(p.base64);
@@ -321,8 +321,65 @@ function doPost(e) {
       var folder   = DriveApp.getFolderById(folderId);
       var file     = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      var url = 'https://lh3.googleusercontent.com/d/' + file.getId();
-      return respond({ status:'ok', url:url, fileId:file.getId() });
+      var fid = file.getId();
+      var url = 'https://drive.google.com/file/d/' + fid + '/view?usp=sharing';
+      return respond({ status:'ok', url:url, fileId:fid });
+    }
+
+    // ── replacePhoto — replace content Drive file ដើម (fileId/URL មិនប្ដូរ) ──
+    // ⚠️ ត្រូវការ: Services → Drive API → Enable
+    if (p.action === 'replacePhoto') {
+      var rfid  = String(p.fileId   || '').trim();
+      var rb64  = String(p.base64   || '').trim();
+      var rmime = String(p.mimeType || 'image/jpeg').trim();
+      if (!rfid) return respond({ status:'error', msg:'replacePhoto: fileId required' });
+      if (!rb64) return respond({ status:'error', msg:'replacePhoto: base64 required' });
+      try {
+        var rblob = Utilities.newBlob(Utilities.base64Decode(rb64), rmime);
+        Drive.Files.update({ mimeType: rmime }, rfid, rblob);
+        var rurl = 'https://drive.google.com/file/d/' + rfid + '/view?usp=sharing';
+        return respond({ status:'ok', fileId:rfid, url:rurl });
+      } catch(re) {
+        Logger.log('replacePhoto error: ' + re.message);
+        return respond({ status:'error', msg:'replacePhoto failed: ' + re.message });
+      }
+    }
+
+    // ── updateStaffPhoto — update column Photo ក្នុង StaffInfo Sheet ──
+    if (p.action === 'updateStaffPhoto') {
+      var ugmail    = String(p.gmail    || '').toLowerCase().trim();
+      var uid       = String(p.id       || '').trim();
+      var uphotoUrl = String(p.photoUrl || '').trim();
+      if (!uphotoUrl)      return respond({ status:'error', msg:'updateStaffPhoto: photoUrl required' });
+      if (!ugmail && !uid) return respond({ status:'error', msg:'updateStaffPhoto: gmail or id required' });
+      try {
+        var uss    = SpreadsheetApp.openById(SS_ID);
+        var uws    = uss.getSheetByName('StaffInfo');
+        if (!uws)  return respond({ status:'error', msg:'StaffInfo sheet not found' });
+        var udata  = uws.getDataRange().getValues();
+        var uhdrs  = udata[0].map(function(h){ return String(h).trim(); });
+        var ugmIdx = uhdrs.indexOf('Gmail');
+        var uidIdx = uhdrs.indexOf('ID');
+        var uphIdx = uhdrs.indexOf('Photo');
+        if (uphIdx < 0) return respond({ status:'error', msg:'Photo column not found in StaffInfo' });
+        var uupdated = false;
+        for (var ui = 1; ui < udata.length; ui++) {
+          var rGmail = String(udata[ui][ugmIdx] || '').toLowerCase().trim();
+          var rId    = String(udata[ui][uidIdx]  || '').trim();
+          if ((ugmail && rGmail === ugmail) || (uid && rId === uid)) {
+            uws.getRange(ui + 1, uphIdx + 1).setValue(uphotoUrl);
+            uupdated = true;
+            break;
+          }
+        }
+        SpreadsheetApp.flush();
+        if (!uupdated) return respond({ status:'error', msg:'Staff not found: ' + (ugmail || uid) });
+        Logger.log('updateStaffPhoto OK: ' + (ugmail || uid) + ' → ' + uphotoUrl);
+        return respond({ status:'ok', msg:'Photo link updated in StaffInfo' });
+      } catch(ue) {
+        Logger.log('updateStaffPhoto error: ' + ue.message);
+        return respond({ status:'error', msg:ue.message });
+      }
     }
 
     // ── appendWithPhotos (Food) ──
@@ -349,7 +406,7 @@ function doPost(e) {
       return respond({ status:'ok', photoMorning:row.PhotoMorning||'', photoLunch:row.PhotoLunch||'', photoEvening:row.PhotoEvening||'' });
     }
 
-    // ── checkSession: is user already logged in elsewhere? ──
+    // ── checkSession (POST) ──
     if (p.action === 'checkSession') {
       var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName('User');
       if (!ws) return respond({ status:'ok', active: false });
@@ -357,13 +414,12 @@ function doPost(e) {
       var uIdx=hdrs.indexOf('Username'), tIdx=hdrs.indexOf('SessionToken'), tsIdx=hdrs.indexOf('SessionTime');
       if (tIdx<0||tsIdx<0) return respond({ status:'ok', active: false });
       var username=String(p.username||'').trim().toLowerCase();
-      var SESSION_TIMEOUT = 10 * 60 * 1000; // 10 min: auto-expire if heartbeat stops
+      var SESSION_TIMEOUT = 10 * 60 * 1000;
       for (var i=1;i<data.length;i++) {
         if (String(data[i][uIdx]||'').trim().toLowerCase()===username) {
           var tok=String(data[i][tIdx]||'').trim();
           var ts=Number(data[i][tsIdx]||0);
           var now=new Date().getTime();
-          // Active session = has token AND not expired AND not same token as requester
           if (tok && (now-ts)<SESSION_TIMEOUT && tok!==String(p.myToken||'').trim()) {
             return respond({ status:'ok', active: true, since: ts });
           }
@@ -373,13 +429,12 @@ function doPost(e) {
       return respond({ status:'ok', active: false });
     }
 
-    // ── setSession: register login token ──
+    // ── setSession (POST) ──
     if (p.action === 'setSession') {
       var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName('User');
       if (!ws) return respond({ status:'error', msg:'User sheet not found' });
       var data=ws.getDataRange().getValues(), hdrs=data[0].map(function(h){return String(h).trim();});
       var uIdx=hdrs.indexOf('Username'), tIdx=hdrs.indexOf('SessionToken'), tsIdx=hdrs.indexOf('SessionTime');
-      // Add columns if missing
       if (tIdx<0) { ws.getRange(1,ws.getLastColumn()+1).setValue('SessionToken'); tIdx=ws.getLastColumn()-1; hdrs.push('SessionToken'); }
       if (tsIdx<0) { ws.getRange(1,ws.getLastColumn()+1).setValue('SessionTime'); tsIdx=ws.getLastColumn()-1; hdrs.push('SessionTime'); }
       var username=String(p.username||'').trim().toLowerCase();
@@ -395,7 +450,7 @@ function doPost(e) {
       return respond({ status:'error', msg:'User not found' });
     }
 
-    // ── clearSession: logout, clear token ──
+    // ── clearSession (POST) ──
     if (p.action === 'clearSession') {
       var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName('User');
       if (!ws) return respond({ status:'ok' });
@@ -406,7 +461,6 @@ function doPost(e) {
       var token=String(p.token||'').trim();
       for (var i=1;i<data.length;i++) {
         if (String(data[i][uIdx]||'').trim().toLowerCase()===username) {
-          // Only clear if token matches (prevent clearing someone else's session)
           var storedTok=String(data[i][tIdx]||'').trim();
           if (!token || storedTok===token) {
             ws.getRange(i+1,tIdx+1).setValue('');
@@ -506,7 +560,7 @@ function respond(obj) {
 }
 
 // ============================================================
-// SETUP HEADERS — v5.2 (EmploymentStatus added)
+// SETUP HEADERS — v5.3
 // ============================================================
 function setupHeaders() {
   var ss = SpreadsheetApp.openById(SS_ID);
@@ -547,84 +601,46 @@ function setupHeaders() {
 }
 
 // ============================================================
-// ADD EmploymentStatus COLUMN + FILL EXISTING STAFF
+// ADD EmploymentStatus COLUMN
 // ============================================================
-/**
- * addEmploymentStatusColumn()
- *
- * 1. បន្ថែម column "EmploymentStatus" ទៅ StaffInfo (ប្រសិនបើមិនទាន់មាន)
- * 2. Fill existing staff rows ទាំងអស់ → "កំពុងធ្វើការ" (ប្រសិនបើ cell ទទេ)
- *
- * HOW TO RUN:
- *   Apps Script Editor → ជ្រើស function "addEmploymentStatusColumn" → ▶ Run
- */
 function addEmploymentStatusColumn() {
   var ss = SpreadsheetApp.openById(SS_ID);
   var ws = ss.getSheetByName('StaffInfo');
-
-  if (!ws) {
-    Logger.log('❌ Sheet "StaffInfo" not found!');
-    return;
-  }
-
+  if (!ws) { Logger.log('❌ StaffInfo not found!'); return; }
   var lastCol  = ws.getLastColumn();
   var lastRow  = ws.getLastRow();
   var headers  = ws.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h).trim(); });
-  var colIndex = headers.indexOf('EmploymentStatus'); // 0-based
-
-  // ── Step 1: Add column header if missing ──
+  var colIndex = headers.indexOf('EmploymentStatus');
   if (colIndex < 0) {
-    colIndex = lastCol; // 0-based index of new column
+    colIndex = lastCol;
     ws.getRange(1, lastCol + 1).setValue('EmploymentStatus');
     Logger.log('✅ Column "EmploymentStatus" added at column ' + (lastCol + 1));
   } else {
-    Logger.log('ℹ️ Column "EmploymentStatus" already exists at column ' + (colIndex + 1));
+    Logger.log('ℹ️ Already exists at column ' + (colIndex + 1));
   }
-
-  if (lastRow < 2) {
-    Logger.log('ℹ️ No data rows to fill.');
-    return;
-  }
-
-  // ── Step 2: Fill empty cells → "កំពុងធ្វើការ" ──
-  var sheetColNum = colIndex + 1; // 1-based for getRange
+  if (lastRow < 2) { Logger.log('ℹ️ No data rows.'); return; }
+  var sheetColNum = colIndex + 1;
   var dataRange   = ws.getRange(2, sheetColNum, lastRow - 1, 1);
   var values      = dataRange.getValues();
   var filled      = 0;
-
   for (var i = 0; i < values.length; i++) {
     if (values[i][0] === '' || values[i][0] === null || values[i][0] === undefined) {
-      values[i][0] = 'កំពុងធ្វើការ';
-      filled++;
+      values[i][0] = 'កំពុងធ្វើការ'; filled++;
     }
   }
-
   dataRange.setValues(values);
   Logger.log('✅ Filled ' + filled + ' rows with "កំពុងធ្វើការ"');
-  Logger.log('✅ addEmploymentStatusColumn() DONE! Total staff rows: ' + (lastRow - 1));
-
-  // ── Step 3: Apply dropdown validation ──
   try {
     var rule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(['កំពុងធ្វើការ', 'បានឈប់', 'បានព្យួរ'], true)
-      .setAllowInvalid(false)
-      .build();
+      .requireValueInList(['កំពុងធ្វើការ','បានឈប់','បានព្យួរ'], true)
+      .setAllowInvalid(false).build();
     ws.getRange(2, sheetColNum, lastRow + 100, 1).setDataValidation(rule);
-    Logger.log('✅ Dropdown validation applied (rows 2 to ' + (lastRow + 100) + ')');
-  } catch(ve) {
-    Logger.log('⚠️ Validation skipped: ' + ve.message);
-  }
-
-  // ── Step 4: Highlight the column header ──
+  } catch(ve) { Logger.log('⚠️ Validation: ' + ve.message); }
   try {
     ws.getRange(1, sheetColNum).setBackground('#d1fae5').setFontColor('#065f46').setFontWeight('bold');
-    Logger.log('✅ Header highlighted green');
-  } catch(he) {
-    Logger.log('⚠️ Highlight skipped: ' + he.message);
-  }
-
+  } catch(he) {}
   SpreadsheetApp.flush();
-  Logger.log('🎉 All done! ចុច Refresh hr-system.html ដើម្បីឃើញ EmploymentStatus');
+  Logger.log('🎉 Done!');
 }
 
 // ============================================================
@@ -642,17 +658,15 @@ function setupWebhook() {
 
 function testStaffPhotoFolder() {
   Logger.log('=== Staff Photo Folder Test ===');
-  Logger.log('Folder ID: ' + STAFF_PHOTO_FOLDER);
   try {
     var folder = DriveApp.getFolderById(STAFF_PHOTO_FOLDER);
-    Logger.log('Folder Name: ' + folder.getName());
+    Logger.log('Folder: ' + folder.getName());
     var files = folder.getFiles(), count = 0;
     while (files.hasNext() && count < 5) {
       var f = files.next();
-      Logger.log('File: ' + f.getName() + ' | lh3: https://lh3.googleusercontent.com/d/' + f.getId());
+      Logger.log('File: ' + f.getName() + ' | ID: ' + f.getId());
       count++;
     }
-    Logger.log('Total shown: ' + count + ' files');
   } catch(e) { Logger.log('ERROR: ' + e.message); }
 }
 
@@ -666,5 +680,5 @@ function verifyDeployment() {
 }
 
 function testSendMessage() {
-  sendTelegramMsg(TELEGRAM_CHAT, 'LHB HR v5.2 Test OK!');
+  sendTelegramMsg(TELEGRAM_CHAT, 'LHB HR v5.3 Test OK!');
 }
