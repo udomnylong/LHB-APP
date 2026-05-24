@@ -37,25 +37,56 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
   transform: translateX(-50%) translateY(-80px);
   z-index: 9999;
   background: var(--surface2);
-  border-radius: 0 0 24px 24px;
-  padding: 10px 24px 14px;
+  border-radius: 0 0 22px 22px;
+  border: 1px solid var(--border);
+  border-top: none;
+  padding: 10px 20px 14px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.3);
-  transition: transform .25s cubic-bezier(.34,1.56,.64,1);
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04);
   pointer-events: none;
-  min-width: 120px;
+  min-width: 180px;
+  will-change: transform;
 }
-#ptrIndicator.ptr-pulling  { transform: translateX(-50%) translateY(0px); }
-#ptrIndicator.ptr-loading  { transform: translateX(-50%) translateY(0px); }
-#ptrIndicator.ptr-done     { transform: translateX(-50%) translateY(-80px); transition: transform .4s ease; }
-.ptr-icon { font-size: 22px; transition: transform .3s; line-height: 1; }
-#ptrIndicator.ptr-ready .ptr-icon { transform: rotate(180deg); }
-#ptrIndicator.ptr-loading .ptr-icon { animation: ptr-spin .7s linear infinite; }
-@keyframes ptr-spin { to { transform: rotate(360deg); } }
-.ptr-label { font-size: 11px; font-weight: 600; color: var(--text2); letter-spacing: .3px; white-space: nowrap; }
+/* PTR Ring */
+.ptr-ring-wrap {
+  position: relative;
+  width: 30px; height: 30px;
+  flex-shrink: 0;
+}
+.ptr-svg {
+  width: 30px; height: 30px;
+  transform: rotate(-90deg);
+  display: block;
+}
+.ptr-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 3;
+}
+.ptr-arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 100.5;
+  stroke-dashoffset: 100.5;
+  transition: stroke .3s, stroke-dashoffset .08s linear;
+}
+#ptrIco {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  font-size: 11px;
+  color: var(--accent);
+  line-height: 1;
+  transition: opacity .2s, color .3s, transform .3s cubic-bezier(.34,1.56,.64,1);
+}
+#ptrIndicator.ptr-done .ptr-arc { stroke: var(--green); }
+#ptrIndicator.ptr-done #ptrIco  { color: var(--green); }
+#ptrIndicator.ptr-loading #ptrIco { animation: spin .7s linear infinite; }
+.ptr-label { font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: .2px; white-space: nowrap; }
 
 /* ── Login Screen ── */
 #loginScreen{background:linear-gradient(160deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);align-items:center;justify-content:center;padding:24px;}
@@ -324,8 +355,14 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 
   <!-- Pull to Refresh Indicator -->
 <div id="ptrIndicator">
-  <div class="ptr-icon">↓</div>
-  <div class="ptr-label" id="ptrLabel">ទាញចុះ Refresh</div>
+  <div class="ptr-ring-wrap">
+    <svg class="ptr-svg" viewBox="0 0 40 40">
+      <circle class="ptr-track" cx="20" cy="20" r="16"/>
+      <circle class="ptr-arc"   cx="20" cy="20" r="16" id="ptrArc"/>
+    </svg>
+    <i class="fas fa-arrow-down" id="ptrIco"></i>
+  </div>
+  <span class="ptr-label" id="ptrLabel">ទាញចុះ Refresh</span>
 </div>
 
 <div class="app-scroll" id="appScroll">
@@ -984,6 +1021,31 @@ async function loadTodayStatus(id) {
 
 function pad2(n) { return String(n).padStart(2,'0'); }
 
+// Scan every field in a row for a valid HH:MM time (handles unknown column names)
+function findTimeInRow(row, preferOut) {
+  if (!row) return '';
+  // Named candidates — try preferred field names first
+  const inFields  = ['Time','CheckIn','CheckInTime','TimeIn','InTime','CI','TimestampIn'];
+  const outFields = ['CheckOut','CheckOutTime','TimeOut','OutTime','CO','TimestampOut','Time2','EndTime'];
+  const preferred = preferOut ? outFields : inFields;
+  for (const f of preferred) {
+    const t = cleanTime(row[f]||'');
+    if (t && t !== '00:00') return t;
+  }
+  // Fallback: extract time from DateTime / Timestamp / Date field
+  for (const f of ['DateTime','Timestamp','Date']) {
+    const t = cleanTime(row[f]||'');
+    if (t && t !== '00:00') return t;
+  }
+  // Last resort: brute-force scan all fields (catches any column name)
+  for (const f of Object.keys(row)) {
+    if (['ID','Name','ProjectName','Location','Type','type','Radius'].includes(f)) continue;
+    const t = cleanTime(row[f]||'');
+    if (t && t !== '00:00') return t;
+  }
+  return '';
+}
+
 // Google Sheets serializes time-only cells as "1899-12-30T07:45:00.000Z" or "1899-12-30 07:45:00"
 // Extract just "HH:MM" from any format
 function cleanTime(raw) {
@@ -1567,8 +1629,8 @@ async function loadHistory(force) {
       const day  = dt.getDate();
       const dow  = DOW_KH[dt.getDay()];
       const rec  = byDate[d];
-      const inT  = rec.in  ? cleanTime(rec.in.Time  || rec.in.CheckIn  || rec.in.TimeIn  || '') : '';
-      const outT = rec.out ? cleanTime(rec.out.CheckOut || rec.out.TimeOut || rec.out.OutTime || (rec.out !== rec.in ? rec.out.Time : '') || '') : '';
+      const inT  = findTimeInRow(rec.in,  false);
+      const outT = findTimeInRow(rec.out, true);
       const cls  = inT && outT ? 'present' : inT ? 'partial' : 'absent';
       const proj = (rec.in||rec.out||{}).ProjectName || '';
 
@@ -1885,34 +1947,47 @@ if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
   const scrollEl    = document.getElementById('appScroll');
   if (!indicator || !scrollEl) return;
 
+  const CIRC = 100.5; // 2π × 16 (SVG circle r=16)
+  const arc  = document.getElementById('ptrArc');
+  const ico  = document.getElementById('ptrIco');
+
   function setIndicator(state, pullPct) {
-    indicator.className = '';
     if (state === 'pulling') {
-      indicator.classList.add('ptr-pulling');
-      if (pullPct >= 1) {
-        indicator.classList.add('ptr-ready');
-        indicator.querySelector('.ptr-icon').textContent = '↑';
-        label.textContent = 'លែងដើម្បី Refresh';
-      } else {
-        indicator.querySelector('.ptr-icon').textContent = '↓';
-        label.textContent = 'ទាញចុះ Refresh';
-      }
-      // Slide indicator based on pull distance
-      const translateY = Math.min(pullPct * 60, 60) - 80;
-      indicator.style.transform = 'translateX(-50%) translateY(' + translateY + 'px)';
+      indicator.className = '';
+      indicator.style.transition = 'none';
+      // Slide down proportionally to pull distance (0 → fully visible)
+      const yOff = Math.max(-80, (pullPct * 80) - 80);
+      indicator.style.transform = 'translateX(-50%) translateY(' + yOff + 'px)';
+      // Fill arc ring 0→full as pullPct goes 0→1
+      if (arc) arc.style.strokeDashoffset = CIRC * (1 - Math.min(pullPct, 1));
+      // Arrow flip when ready
+      if (ico) ico.className = pullPct >= 1 ? 'fas fa-arrow-up' : 'fas fa-arrow-down';
+      label.textContent = pullPct >= 1 ? 'លែងដើម្បី Refresh' : 'ទាញចុះ Refresh';
+
     } else if (state === 'loading') {
-      indicator.classList.add('ptr-loading');
-      indicator.style.transform = '';
-      indicator.querySelector('.ptr-icon').textContent = '↻';
+      indicator.className = 'ptr-loading';
+      indicator.style.transition = 'transform .3s cubic-bezier(.34,1.56,.64,1)';
+      indicator.style.transform  = 'translateX(-50%) translateY(0px)';
+      if (arc) arc.style.strokeDashoffset = 0;
+      if (ico) ico.className = 'fas fa-circle-notch';
       label.textContent = 'កំពុង Refresh...';
+      if (navigator.vibrate) navigator.vibrate(12);
+
     } else if (state === 'done') {
-      indicator.classList.add('ptr-done');
-      indicator.style.transform = '';
-      indicator.querySelector('.ptr-icon').textContent = '✓';
+      indicator.className = 'ptr-done';
+      indicator.style.transition = 'transform .3s cubic-bezier(.34,1.56,.64,1)';
+      indicator.style.transform  = 'translateX(-50%) translateY(0px)';
+      if (arc) arc.style.strokeDashoffset = 0;
+      if (ico) { ico.className = 'fas fa-check'; ico.style.transform = 'translate(-50%,-50%) scale(1.15)'; }
       label.textContent = 'Refresh ជោគជ័យ!';
-    } else {
-      indicator.style.transform = '';
-      indicator.querySelector('.ptr-icon').textContent = '↓';
+      if (navigator.vibrate) navigator.vibrate([10, 40, 20]);
+
+    } else { // reset
+      indicator.className = '';
+      indicator.style.transition = 'transform .38s cubic-bezier(.4,0,.2,1)';
+      indicator.style.transform  = 'translateX(-50%) translateY(-80px)';
+      if (arc) { arc.style.strokeDashoffset = CIRC; arc.style.stroke = ''; }
+      if (ico) { ico.className = 'fas fa-arrow-down'; ico.style.transform = 'translate(-50%,-50%)'; }
       label.textContent = 'ទាញចុះ Refresh';
     }
   }
