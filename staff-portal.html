@@ -1795,42 +1795,55 @@ async function handleProfilePhoto(input) {
     // ── 3. Update all photo elements in UI immediately ──
     const imgStyle = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block';
     const initial  = (currentStaff.Name || '?')[0];
-    // Bust cache with ?t= so browser re-fetches the replaced image
-    const cacheBust = newUrl + (newUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-    const imgTag    = `<img src="${cacheBust}" style="${imgStyle}" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.parentNode.textContent='${initial}'">`;
+    // Display: use lh3 URL (no CORS issue for img tags from any origin)
+    // Sheet:   keep drive.google.com URL (permanent, shareable)
+    const displayUrl = newFileId
+      ? 'https://lh3.googleusercontent.com/d/' + newFileId
+      : newUrl;
+    const cacheBust = displayUrl + '?t=' + Date.now();
+    // No crossorigin="anonymous" — avoids CORS block from file:// or null origin
+    const imgTag = `<img src="${cacheBust}" style="${imgStyle}" referrerpolicy="no-referrer" onerror="this.parentNode.textContent='${initial}'">`;
     ['profilePhoto', 'profilePhotoLarge', 'topAvatar'].forEach(id => {
       const el = document.getElementById(id); if (el) el.innerHTML = imgTag;
     });
 
     // ── 4. Persist to staff session ──
-    currentStaff.Photo        = newUrl;
+    // Store drive URL (consistent with Sheet) — initApp.buildPhotoUrl() converts to lh3 for display
+    currentStaff.Photo        = newFileId
+      ? 'https://drive.google.com/file/d/' + newFileId + '/view?usp=sharing'
+      : newUrl;
     currentStaff._photoFileId = newFileId;
     saveStaffSession();
 
-    // ── 5. Update StaffInfo Sheet (blocking — user must know if it fails) ──
+    // ── 5. Update StaffInfo Sheet (blocking) ──
     const driveUrl = newFileId
       ? 'https://drive.google.com/file/d/' + newFileId + '/view?usp=sharing'
       : newUrl;
+
+    const _gm = (currentStaff.Gmail || currentStaff.email || currentStaff.Email || '').toLowerCase().trim();
+    const _id = String(currentStaff.ID || currentStaff.StaffID || '').trim();
+    console.log('[updateStaffPhoto] sending → gmail:', _gm, '| id:', _id, '| url:', driveUrl);
+
     try {
       const sr = await fetch(SU, {
         method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
           action:   'updateStaffPhoto',
-          gmail:    (currentStaff.Gmail || '').toLowerCase().trim(),
-          id:       currentStaff.ID     || '',
+          gmail:    _gm,
+          id:       _id,
           photoUrl: driveUrl
         })
       });
       const sj = await sr.json();
+      console.log('[updateStaffPhoto] response:', sj);
       if (sj.status !== 'ok') {
-        console.warn('[updateStaffPhoto] Failed:', sj.msg);
-        showToast('⚠️ រក្សា Link Sheet: ' + (sj.msg || 'Error'), 'err');
+        showToast('⚠️ Sheet: ' + (sj.msg || 'Error'), 'err');
       } else {
         showToast('✅ ប្ដូររូបថត Profile ជោគជ័យ!', 'ok');
       }
     } catch(e) {
       console.warn('[updateStaffPhoto] Network error:', e);
-      showToast('✅ ប្ដូររូបថត Profile ជោគជ័យ! (Sheet sync error)', 'ok');
+      showToast('⚠️ Sheet sync failed — ' + e.message, 'err');
     }
 
   } catch(e) {
