@@ -972,7 +972,8 @@ async function loadTodayStatus(id) {
     if (rec) {
       dot.className   = 'status-dot in';
       lbl.textContent = '✅ Check In រួចហើយ';
-      stm.textContent = (rec.Time ? rec.Time + ' · ' : '') + kh;
+      const t = cleanTime(rec.Time || rec.CheckIn || '');
+      stm.textContent = (t ? t + ' · ' : '') + kh;
     } else {
       dot.className   = 'status-dot none';
       lbl.textContent = 'មិនទាន់ Check In';
@@ -982,6 +983,27 @@ async function loadTodayStatus(id) {
 }
 
 function pad2(n) { return String(n).padStart(2,'0'); }
+
+// Google Sheets serializes time-only cells as "1899-12-30T07:45:00.000Z" or "1899-12-30 07:45:00"
+// Extract just "HH:MM" from any format
+function cleanTime(raw) {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  if (!s || s === '0') return '';
+  // ISO: "1899-12-30T07:45:00.000Z" or "2026-05-24T07:45:00.000Z"
+  const iso = s.match(/T(\d{2}):(\d{2})/);
+  if (iso) return iso[1] + ':' + iso[2];
+  // Space-separated: "1899-12-30 07:45:00" → take part after last space
+  if (s.includes(' ')) {
+    const tp = s.slice(s.lastIndexOf(' ') + 1);
+    const m  = tp.match(/^(\d{1,2}):(\d{2})/);
+    if (m) return pad2(parseInt(m[1])) + ':' + m[2];
+  }
+  // Pure time: "07:45:00" or "07:45" or "7:45"
+  const plain = s.match(/^(\d{1,2}):(\d{2})/);
+  if (plain) return pad2(parseInt(plain[1])) + ':' + plain[2];
+  return '';
+}
 
 // ════════════════════════════════════════════════
 // NAVIGATION
@@ -1469,12 +1491,19 @@ let _historyLoaded = false;
 function normalizeDate(raw) {
   raw = String(raw||'').trim();
   if (!raw) return '';
+  // Skip bogus Google Sheets time-only values serialized with epoch date
+  if (raw.startsWith('1899-12-30') || raw.startsWith('1899-12-31')) return '';
+  // ISO datetime: "2026-05-24T07:45:00.000Z" → "2026-05-24"
+  if (raw.includes('T')) return raw.slice(0, 10);
+  // Slash formats: "2026/05/24" or "5/24/2026" or "24/5/2026"
   if (raw.includes('/')) {
     const p = raw.split('/');
     if (p[0].length === 4) return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0');
     if (p.length === 3)    return p[2]+'-'+p[0].padStart(2,'0')+'-'+p[1].padStart(2,'0');
   }
-  return raw.slice(0,10);
+  // Space datetime: "2026-05-24 07:45:00" → "2026-05-24"
+  if (raw.includes(' ')) return raw.slice(0, 10);
+  return raw.slice(0, 10);
 }
 
 async function loadHistory(force) {
@@ -1508,12 +1537,17 @@ async function loadHistory(force) {
     const byDate = {};
     rows.forEach(x => {
       const d = normalizeDate(x.Date);
+      if (!d) return; // skip rows with bogus/empty date (time-only cells)
       if (!byDate[d]) byDate[d] = { in: null, out: null };
       const tp = (x.Type||x.type||'').toLowerCase();
       if (tp === 'checkout' || tp === 'check out' || tp === 'out') {
         if (!byDate[d].out) byDate[d].out = x;
       } else {
         if (!byDate[d].in) byDate[d].in = x;
+        // Single-row format: same record has both CheckIn & CheckOut fields
+        if (!byDate[d].out && cleanTime(x.CheckOut||x.TimeOut||x.OutTime||'')) {
+          byDate[d].out = x;
+        }
       }
     });
 
@@ -1533,8 +1567,8 @@ async function loadHistory(force) {
       const day  = dt.getDate();
       const dow  = DOW_KH[dt.getDay()];
       const rec  = byDate[d];
-      const inT  = rec.in  ? (rec.in.Time  || rec.in.CheckIn  || '') : '';
-      const outT = rec.out ? (rec.out.Time || rec.out.CheckOut || '') : '';
+      const inT  = rec.in  ? cleanTime(rec.in.Time  || rec.in.CheckIn  || rec.in.TimeIn  || '') : '';
+      const outT = rec.out ? cleanTime(rec.out.CheckOut || rec.out.TimeOut || rec.out.OutTime || (rec.out !== rec.in ? rec.out.Time : '') || '') : '';
       const cls  = inT && outT ? 'present' : inT ? 'partial' : 'absent';
       const proj = (rec.in||rec.out||{}).ProjectName || '';
 
