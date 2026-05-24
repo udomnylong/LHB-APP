@@ -887,9 +887,25 @@ document.getElementById('lgPass').addEventListener('keydown', e => { if(e.key===
 // ════════════════════════════════════════════════
 // INIT APP
 // ════════════════════════════════════════════════
+// Extract Google Drive File ID from any Drive/lh3 URL format
+function extractDriveFileId(url) {
+  if (!url) return '';
+  // /file/d/ID  or  /d/ID  (Drive & lh3 formats)
+  const m1 = url.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
+  if (m1) return m1[1];
+  // ?id=ID  or  &id=ID  (thumbnail / open formats)
+  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]{20,})/);
+  if (m2) return m2[1];
+  return '';
+}
+
 function initApp(staff) {
   const name = staff.Name || '—';
   const id   = staff.ID   || '—';
+
+  // Cache Drive file ID for replace-photo feature
+  if (!currentStaff._photoFileId)
+    currentStaff._photoFileId = extractDriveFileId(staff.Photo || '');
 
   // Greeting
   const h = new Date().getHours();
@@ -1723,53 +1739,93 @@ function triggerPhotoChange() {
 async function handleProfilePhoto(input) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
-  if (file.size > 5 * 1024 * 1024) { showToast('⚠️ រូបភាពធំពេក (Max 5MB)','err'); return; }
+  if (file.size > 5 * 1024 * 1024) { showToast('⚠️ រូបភាពធំពេក (Max 5MB)', 'err'); return; }
 
-  showToast('📤 កំពុង Upload រូបភាព...','ok');
+  // Show loading state on photo wrap
+  const wrap = document.getElementById('profPhotoWrap');
+  if (wrap) { wrap.style.opacity = '0.5'; wrap.style.pointerEvents = 'none'; }
+  showToast('📤 កំពុង Upload...', 'ok');
 
   try {
-    // Read as base64
-    const base64 = await new Promise((res,rej) => {
+    // ── 1. Read file as base64 ──
+    const base64 = await new Promise((res, rej) => {
       const fr = new FileReader();
       fr.onload  = () => res(fr.result.split(',')[1]);
       fr.onerror = rej;
       fr.readAsDataURL(file);
     });
+    const mimeType = file.type || 'image/jpeg';
 
-    // Upload to Drive
-    const ur = await fetch(SU, {
-      method:'POST', mode:'cors', headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({
-        action:   'uploadPhoto',
-        base64,
-        mimeType: file.type || 'image/jpeg',
-        fileName: 'Profile_' + currentStaff.ID + '_' + Date.now() + '.jpg',
-        folderId: '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y'
-      })
-    });
-    const uj = await ur.json();
-    if (uj.status !== 'ok') throw new Error(uj.msg || 'Upload failed');
+    // ── 2. Determine existing file ID (use for replace, or empty for new upload) ──
+    const oldFileId = currentStaff._photoFileId
+                   || extractDriveFileId(currentStaff.Photo || '');
 
-    const newUrl = uj.url || '';
-    // Update display immediately (local preview)
+    let uj = null;
+
+    if (oldFileId) {
+      // ── 2a. Replace existing Drive file (same ID → same URL) ──
+      try {
+        const r = await fetch(SU, {
+          method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'replacePhoto', fileId: oldFileId, base64, mimeType,
+                                 staffId: currentStaff.ID || '' })
+        });
+        uj = await r.json();
+      } catch(e) { uj = null; }
+    }
+
+    if (!uj || uj.status !== 'ok') {
+      // ── 2b. Fallback — upload as new file (first time or replace failed) ──
+      const r = await fetch(SU, {
+        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'uploadPhoto', base64, mimeType,
+          fileName: 'Profile_' + (currentStaff.ID || 'staff') + '.jpg',
+          folderId: FOLDER_ID
+        })
+      });
+      uj = await r.json();
+    }
+
+    if (!uj || uj.status !== 'ok') throw new Error((uj && uj.msg) || 'Upload failed');
+
+    const newUrl    = uj.url    || '';
+    const newFileId = uj.fileId || extractDriveFileId(newUrl) || oldFileId;
+
+    // ── 3. Update all photo elements in UI immediately ──
     const imgStyle = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block';
-    const imgTag   = `<img src="${newUrl}" style="${imgStyle}" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.parentNode.textContent='${(currentStaff.Name||'?')[0]}'">`;
-    const pp  = document.getElementById('profilePhoto');
-    const ppl = document.getElementById('profilePhotoLarge');
-    const tav = document.getElementById('topAvatar');
-    if (pp)  pp.innerHTML  = imgTag;
-    if (ppl) ppl.innerHTML = imgTag;
-    if (tav) tav.innerHTML = imgTag;
+    const initial  = (currentStaff.Name || '?')[0];
+    // Bust cache with ?t= so browser re-fetches the replaced image
+    const cacheBust = newUrl + (newUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+    const imgTag    = `<img src="${cacheBust}" style="${imgStyle}" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.parentNode.textContent='${initial}'">`;
+    ['profilePhoto', 'profilePhotoLarge', 'topAvatar'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.innerHTML = imgTag;
+    });
 
-    // Save new URL to currentStaff for session
-    currentStaff.Photo = newUrl;
+    // ── 4. Persist to staff session ──
+    currentStaff.Photo        = newUrl;
+    currentStaff._photoFileId = newFileId;
     saveStaffSession();
 
-    showToast('✅ ប្ដូររូបភាព Profile ជោគជ័យ!','ok');
+    // ── 5. Update StaffInfo Sheet (non-blocking) ──
+    fetch(SU, {
+      method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action:   'updateStaffPhoto',
+        gmail:    (currentStaff.Gmail || '').toLowerCase().trim(),
+        id:       currentStaff.ID     || '',
+        photoUrl: newUrl
+      })
+    }).catch(e => console.warn('[updateStaffPhoto]', e));
+
+    showToast('✅ ប្ដូររូបថត Profile ជោគជ័យ!', 'ok');
+
   } catch(e) {
     console.warn('handleProfilePhoto:', e);
-    showToast('❌ Upload បរាជ័យ — សូម​ព្យាយាម​ម្ដងទៀត','err');
+    showToast('❌ Upload បរាជ័យ — សូម​ព្យាយាម​ម្ដងទៀត', 'err');
   }
+
+  if (wrap) { wrap.style.opacity = ''; wrap.style.pointerEvents = ''; }
   input.value = '';
 }
 
