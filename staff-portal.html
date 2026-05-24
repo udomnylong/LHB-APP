@@ -1046,24 +1046,37 @@ function findTimeInRow(row, preferOut) {
   return '';
 }
 
-// Google Sheets serializes time-only cells as "1899-12-30T07:45:00.000Z" or "1899-12-30 07:45:00"
-// Extract just "HH:MM" from any format
+// Extract "HH:MM" from any time format, always returning browser-local time.
+// Google Apps Script serializes Date objects as UTC ISO ("...T00:45:00.000Z"),
+// so we use new Date(s).getHours() to convert UTC → local (ICT +7 = correct).
 function cleanTime(raw) {
   if (!raw) return '';
   const s = String(raw).trim();
   if (!s || s === '0') return '';
-  // ISO: "1899-12-30T07:45:00.000Z" or "2026-05-24T07:45:00.000Z"
-  const iso = s.match(/T(\d{2}):(\d{2})/);
-  if (iso) return iso[1] + ':' + iso[2];
-  // Space-separated: "1899-12-30 07:45:00" → take part after last space
-  if (s.includes(' ')) {
-    const tp = s.slice(s.lastIndexOf(' ') + 1);
-    const m  = tp.match(/^(\d{1,2}):(\d{2})/);
-    if (m) return pad2(parseInt(m[1])) + ':' + m[2];
+
+  // ISO format (contains T): parse as Date → getHours/Minutes = browser local time
+  // Works for both epoch time-only ("1899-12-30T...Z") and real datetimes ("2026-05-24T...Z")
+  if (s.includes('T')) {
+    try {
+      const dt = new Date(s);
+      if (!isNaN(dt.getTime())) return pad2(dt.getHours()) + ':' + pad2(dt.getMinutes());
+    } catch(e) {}
   }
-  // Pure time: "07:45:00" or "07:45" or "7:45"
+
+  // Space-separated datetime: "1899-12-30 07:45:00" or "2026-05-24 07:45:00"
+  // Apps Script formats these in LOCAL time already → extract digits directly
+  if (s.includes(' ')) {
+    const parts = s.split(' ');
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const m = parts[i].match(/^(\d{1,2}):(\d{2})/);
+      if (m) return pad2(parseInt(m[1])) + ':' + m[2];
+    }
+  }
+
+  // Pure time string: "07:45:00" | "07:45" | "7:45"
   const plain = s.match(/^(\d{1,2}):(\d{2})/);
   if (plain) return pad2(parseInt(plain[1])) + ':' + plain[2];
+
   return '';
 }
 
