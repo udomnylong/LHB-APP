@@ -30,6 +30,33 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 .screen{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;transition:opacity .25s,transform .25s;}
 .screen.hidden{opacity:0;pointer-events:none;transform:translateY(20px);}
 
+/* ── Pull to Refresh ── */
+#ptrIndicator {
+  position: fixed;
+  top: 0; left: 50%;
+  transform: translateX(-50%) translateY(-80px);
+  z-index: 9999;
+  background: var(--surface2);
+  border-radius: 0 0 24px 24px;
+  padding: 10px 24px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  transition: transform .25s cubic-bezier(.34,1.56,.64,1);
+  pointer-events: none;
+  min-width: 120px;
+}
+#ptrIndicator.ptr-pulling  { transform: translateX(-50%) translateY(0px); }
+#ptrIndicator.ptr-loading  { transform: translateX(-50%) translateY(0px); }
+#ptrIndicator.ptr-done     { transform: translateX(-50%) translateY(-80px); transition: transform .4s ease; }
+.ptr-icon { font-size: 22px; transition: transform .3s; line-height: 1; }
+#ptrIndicator.ptr-ready .ptr-icon { transform: rotate(180deg); }
+#ptrIndicator.ptr-loading .ptr-icon { animation: ptr-spin .7s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+.ptr-label { font-size: 11px; font-weight: 600; color: var(--text2); letter-spacing: .3px; white-space: nowrap; }
+
 /* ── Login Screen ── */
 #loginScreen{background:linear-gradient(160deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);align-items:center;justify-content:center;padding:24px;}
 .login-glow{position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,.2),transparent 70%);top:20%;left:50%;transform:translateX(-50%);}
@@ -179,6 +206,51 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 @keyframes spin{to{transform:rotate(360deg)}}
 .pulse{animation:pulse 2s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+/* ── Tab Panels ── */
+.tab-panel{display:none;animation:fadeUp .2s ease;}
+.tab-panel.active{display:block;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── History List ── */
+.hist-month-label{font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.8px;text-transform:uppercase;padding:16px 0 8px;}
+.hist-item{background:var(--surface);border-radius:var(--r12);border:1px solid var(--border);padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.hist-item.present{border-left:3px solid var(--green);}
+.hist-item.partial{border-left:3px solid var(--orange);}
+.hist-item.absent{border-left:3px solid var(--text3);}
+.hist-date-col{min-width:38px;text-align:center;}
+.hist-day{font-size:22px;font-weight:800;color:var(--text);line-height:1;}
+.hist-dow{font-size:10px;color:var(--text3);font-weight:600;margin-top:1px;}
+.hist-divider{width:1px;height:40px;background:var(--border);}
+.hist-times{flex:1;}
+.hist-row{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:2px;}
+.hist-row:last-child{margin-bottom:0;}
+.hist-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px;}
+.badge-in{background:rgba(16,185,129,.15);color:var(--green);}
+.badge-out{background:rgba(245,158,11,.15);color:var(--orange);}
+.badge-absent{background:rgba(100,116,139,.12);color:var(--text3);}
+.hist-time-val{font-weight:700;color:var(--text);}
+.hist-summary{font-size:10px;color:var(--text3);margin-top:2px;}
+.hist-empty{text-align:center;padding:40px 20px;color:var(--text3);}
+.hist-empty i{font-size:40px;margin-bottom:12px;display:block;}
+.hist-load{text-align:center;padding:30px;color:var(--text2);font-size:13px;}
+
+/* ── Profile Panel ── */
+.prof-panel-card{background:var(--surface);border-radius:20px;padding:20px;border:1px solid var(--border);margin-bottom:14px;}
+.prof-photo-wrap{position:relative;width:80px;height:80px;margin:0 auto 12px;cursor:pointer;}
+.prof-photo-wrap .profile-photo{width:80px;height:80px;border-radius:22px;font-size:34px;}
+.prof-photo-edit{position:absolute;bottom:-4px;right:-4px;width:26px;height:26px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;pointer-events:none;}
+.prof-info-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);}
+.prof-info-row:last-child{border-bottom:none;}
+.prof-info-label{font-size:11px;color:var(--text3);font-weight:600;}
+.prof-info-val{font-size:13px;font-weight:700;color:var(--text);text-align:right;}
+.prof-action-btn{width:100%;padding:13px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r12);color:var(--text);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:10px;transition:.15s;}
+.prof-action-btn:active{transform:scale(.97);}
+.prof-action-btn i{width:20px;text-align:center;color:var(--text2);}
+
+/* ── GPS Pulse ring ── */
+@keyframes gpsPulseAnim{0%{transform:scale(1);opacity:.7}70%{transform:scale(2.6);opacity:0}100%{transform:scale(2.6);opacity:0}}
+#gpsPulse{position:absolute;inset:-4px;border-radius:50%;pointer-events:none;background:transparent;}
+#gpsPulse.pulsing{animation:gpsPulseAnim 1.8s ease-out infinite;}
 </style>
 </head>
 <body>
@@ -250,7 +322,16 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
     </div>
   </div>
 
-  <div class="app-scroll" id="appScroll">
+  <!-- Pull to Refresh Indicator -->
+<div id="ptrIndicator">
+  <div class="ptr-icon">↓</div>
+  <div class="ptr-label" id="ptrLabel">ទាញចុះ Refresh</div>
+</div>
+
+<div class="app-scroll" id="appScroll">
+
+<!-- ═══ HOME PANEL ═══ -->
+<div id="homePanel" class="tab-panel active">
 
     <!-- Profile Card -->
     <div class="profile-section">
@@ -277,13 +358,24 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
     </div>
 
     <!-- GPS Project Status -->
-    <div id="gpsProjectCard" style="margin:0 16px 12px;background:var(--surface);border-radius:var(--r12);border:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:10px;display:none;">
-      <div id="gpsDot" style="width:9px;height:9px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:.3s;"></div>
-      <div style="flex:1;min-width:0">
-        <div id="gpsProjectLabel" style="font-size:12px;font-weight:700;color:var(--text);">🛰️ កំពុងរក GPS...</div>
-        <div id="gpsProjectSub" style="font-size:11px;color:var(--text2);margin-top:1px;"></div>
+    <div id="gpsProjectCard" style="margin:0 16px 12px;background:var(--surface);border-radius:var(--r12);border:1px solid var(--border);padding:10px 14px;display:none;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="position:relative;flex-shrink:0;width:12px;height:12px;">
+          <div id="gpsDot" style="width:12px;height:12px;border-radius:50%;background:var(--text3);transition:.4s;"></div>
+          <div id="gpsPulse"></div>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div id="gpsProjectLabel" style="font-size:12px;font-weight:700;color:var(--text);">🛰️ កំពុងរក GPS...</div>
+          <div id="gpsProjectSub" style="font-size:11px;color:var(--text2);margin-top:1px;"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <div id="gpsProjectBadge" style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;background:rgba(16,185,129,.15);color:var(--green);display:none;">✅ ក្នុងតំបន់</div>
+          <button id="gpsRetryBtn" onclick="retryGPS()" title="Retry GPS" style="display:none;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 7px;font-size:11px;cursor:pointer;line-height:1;">🔄</button>
+        </div>
       </div>
-      <div id="gpsProjectBadge" style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;background:rgba(16,185,129,.15);color:var(--green);display:none;">✅ ក្នុងតំបន់</div>
+      <div id="gpsAssignedRow" style="display:none;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);">
+        🏢 គម្រោងដែលកំណត់: <span id="gpsAssignedName" style="color:var(--accent);font-weight:600;"></span>
+      </div>
     </div>
 
     <!-- Menu: Check In / Out -->
@@ -343,6 +435,71 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
         </div>
       </div>
     </div>
+
+</div><!-- end homePanel -->
+
+<!-- ═══ HISTORY PANEL ═══ -->
+<div id="historyPanel" class="tab-panel">
+  <div style="padding:16px 16px 0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div style="font-size:16px;font-weight:800;">📋 ប្រវត្តិ Check In/Out</div>
+      <button onclick="loadHistory(true)" style="background:none;border:1px solid var(--border);border-radius:8px;color:var(--text2);padding:5px 10px;font-size:11px;cursor:pointer;font-family:var(--font);">🔄 Refresh</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">1 ខែចុងក្រោយ</div>
+  </div>
+  <div id="historyList" style="padding:0 16px 16px;">
+    <div class="hist-load"><i class="fas fa-circle-notch spin"></i> កំពុងទាញទិន្នន័យ...</div>
+  </div>
+</div>
+
+<!-- ═══ PROFILE PANEL ═══ -->
+<div id="profilePanel" class="tab-panel">
+  <div style="padding:16px;">
+
+    <!-- Photo + Info Card -->
+    <div class="prof-panel-card" style="text-align:center;">
+      <div class="prof-photo-wrap" id="profPhotoWrap" onclick="triggerPhotoChange()">
+        <div class="profile-photo" id="profilePhotoLarge" style="width:80px;height:80px;border-radius:22px;font-size:34px;margin:0 auto;">?</div>
+        <div class="prof-photo-edit">✏️</div>
+        <input type="file" id="profilePhotoInput" accept="image/*" style="display:none;" onchange="handleProfilePhoto(this)">
+      </div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:2px;" id="profPanelName">—</div>
+      <div style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:12px;" id="profPanelId">—</div>
+      <div id="profPanelTags" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:16px;"></div>
+      <div style="border-top:1px solid var(--border);padding-top:14px;">
+        <div class="prof-info-row">
+          <span class="prof-info-label">Gmail</span>
+          <span class="prof-info-val" id="profPanelGmail">—</span>
+        </div>
+        <div class="prof-info-row">
+          <span class="prof-info-label">អ.វ.ក</span>
+          <span class="prof-info-val" id="profPanelPos">—</span>
+        </div>
+        <div class="prof-info-row">
+          <span class="prof-info-label">នាយកដ្ឋាន</span>
+          <span class="prof-info-val" id="profPanelDept">—</span>
+        </div>
+        <div class="prof-info-row">
+          <span class="prof-info-label">គម្រោង</span>
+          <span class="prof-info-val" id="profPanelProj">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <button class="prof-action-btn" onclick="showChangePwd()">
+      <i class="fas fa-key" style="color:var(--accent);"></i>
+      <span>ផ្លាស់ប្ដូរ Password</span>
+      <i class="fas fa-chevron-right" style="margin-left:auto;font-size:11px;color:var(--text3);"></i>
+    </button>
+    <button class="prof-action-btn" onclick="confirmLogout()" style="color:var(--red);">
+      <i class="fas fa-sign-out-alt" style="color:var(--red);"></i>
+      <span>ចាកចេញ</span>
+      <i class="fas fa-chevron-right" style="margin-left:auto;font-size:11px;color:var(--text3);"></i>
+    </button>
+
+  </div>
+</div>
 
   </div><!-- end app-scroll -->
 
@@ -631,11 +788,13 @@ async function doLogin() {
       showLoginErr('Gmail ឬ Password មិនត្រឹមត្រូវ'); return;
     }
 
-    // Save session
+    // ── Save session permanently (clear only on explicit logout) ──
     currentStaff = staff;
     localStorage.setItem('sp_session', JSON.stringify(staff));
+    // Also save credentials for auto-refresh (encrypted with btoa)
+    localStorage.setItem('sp_cred', btoa(JSON.stringify({ email, pass })));
 
-    // Remember credentials if checked
+    // Remember Me checkbox (for pre-fill only — session persists regardless)
     const remCb = document.getElementById('rememberMe');
     if (remCb && remCb.checked) {
       localStorage.setItem('sp_remember', JSON.stringify({ email, pass }));
@@ -852,12 +1011,12 @@ function saveStaffSession() {
 }
 
 function buildQRNav(type) {
-  // Priority: GPS-detected project → staff assigned project → default
+  // Priority: GPS verified in-range project → staff assigned project → default
   let proj = null;
-  if (_gpsDetected && _gpsDetected.project) {
-    proj = _gpsDetected.project;  // GPS auto-detected
+  if (_gpsDetected && _gpsDetected.project && _gpsDetected.project.inRange && !_gpsDetected.weakSignal) {
+    proj = _gpsDetected.project;  // GPS verified: within radius + accurate signal
   } else {
-    proj = getStaffProject();     // from Project sheet by staff.ProjectName
+    proj = getStaffProject();     // fallback: Project sheet by staff.ProjectName
   }
   return {
     project:  proj ? (proj.ProjectName || currentStaff.ProjectName || 'LHB') : (currentStaff.ProjectName || 'LHB'),
@@ -914,8 +1073,11 @@ async function loadProjects() {
 }
 
 // ══ GPS Project Detection ══
-let _gpsWatcher = null;
+let _gpsWatcher  = null;
 let _gpsDetected = null;
+let _gpsReadings = [];       // rolling buffer for position stabilization
+const GPS_ACC_MAX = 80;      // reject fix if accuracy worse than 80 m
+const GPS_STABLE  = 3;       // readings needed before trusting position
 
 function calcDistGPS(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -942,16 +1104,23 @@ function findNearestProject(lat, lng) {
   return nearest;
 }
 
+function retryGPS() {
+  _gpsReadings = [];
+  if (_gpsWatcher) { navigator.geolocation.clearWatch(_gpsWatcher); _gpsWatcher = null; }
+  startGPSDetection();
+}
+
 function startGPSDetection() {
   const card = document.getElementById('gpsProjectCard');
-  if (card) card.style.display = 'flex';
+  if (card) card.style.display = 'block';
 
   if (!navigator.geolocation) {
     updateGPSUI(null, 'Browser មិន Support GPS', '', false);
     return;
   }
 
-  updateGPSUI(null, '🛰️ កំពុងរក GPS...', '', false);
+  _gpsReadings = [];
+  updateGPSUI('blue', '🛰️ កំពុងរក GPS...', 'សូម Allow Location Permission', false);
 
   if (_gpsWatcher) navigator.geolocation.clearWatch(_gpsWatcher);
 
@@ -961,52 +1130,92 @@ function startGPSDetection() {
       const lng = pos.coords.longitude;
       const acc = Math.round(pos.coords.accuracy);
 
-      const proj = findNearestProject(lat, lng);
+      // Build rolling buffer for stabilization
+      _gpsReadings.push({ lat, lng, acc });
+      if (_gpsReadings.length > GPS_STABLE) _gpsReadings.shift();
+
+      // Show calibrating while buffer fills
+      if (_gpsReadings.length < GPS_STABLE) {
+        updateGPSUI('blue', '🛰️ កំពុង Calibrate...', `±${acc}m — ${_gpsReadings.length}/${GPS_STABLE}`, false);
+        return;
+      }
+
+      // Average the buffer for a stable position
+      const n    = _gpsReadings.length;
+      const aLat = _gpsReadings.reduce((s,r) => s+r.lat, 0) / n;
+      const aLng = _gpsReadings.reduce((s,r) => s+r.lng, 0) / n;
+      const aAcc = Math.round(_gpsReadings.reduce((s,r) => s+r.acc, 0) / n);
+
+      // Reject fix if GPS accuracy is too weak to trust
+      if (aAcc > GPS_ACC_MAX) {
+        _gpsDetected = { lat:aLat, lng:aLng, acc:aAcc, project:null, weakSignal:true };
+        updateGPSUI('orange', '📡 GPS ខ្សោយ', `±${aAcc}m — ត្រូវការ ≤${GPS_ACC_MAX}m`, false);
+        return;
+      }
+
+      const proj = findNearestProject(aLat, aLng);
 
       if (proj) {
-        _gpsDetected = { lat, lng, acc, project: proj };
-
+        _gpsDetected = { lat:aLat, lng:aLng, acc:aAcc, project:proj };
         if (proj.inRange) {
-          // Auto-update staff project if detected project differs
           if (currentStaff && proj.ProjectName !== currentStaff.ProjectName) {
-            currentStaff._gpsProject = proj; // store detected project
+            currentStaff._gpsProject = proj;
           }
-          updateGPSUI('green', '✅ ' + proj.ProjectName, proj.distance + 'm ពីគម្រោង | ±' + acc + 'm', true);
+          updateGPSUI('green', '✅ ' + proj.ProjectName, `${proj.distance}m ពីគម្រោង | ±${aAcc}m`, true);
         } else {
-          updateGPSUI('orange', '📍 ' + proj.ProjectName, 'ចម្ងាយ ' + proj.distance + 'm | ±' + acc + 'm', false);
+          updateGPSUI('orange', '📍 ' + proj.ProjectName, `ចម្ងាយ ${proj.distance}m | ±${aAcc}m`, false);
         }
       } else {
-        updateGPSUI('blue', '📡 GPS OK', '±' + acc + 'm — គ្មានគម្រោងជិត', false);
-        _gpsDetected = { lat, lng, acc, project: null };
+        _gpsDetected = { lat:aLat, lng:aLng, acc:aAcc, project:null };
+        updateGPSUI('blue', '📡 GPS OK', `±${aAcc}m — គ្មានគម្រោងជិត`, false);
       }
     },
     function(err) {
-      if (err.code === 1) {
-        // Permission denied — show guide
-        updateGPSUI('red', '🚫 GPS ត្រូវការ Permission', 'ចុច ☰ ខាងក្រោម ដើម្បីមើលណែនាំ', false);
-        showGPSGuide();
-      } else if (err.code === 2) {
-        updateGPSUI('orange', '📡 GPS Signal ខ្សោយ', 'ចេញខាងក្រៅ ឬ Enable WiFi', false);
-      } else {
-        updateGPSUI('orange', '⏱️ GPS Timeout', 'សូម Allow Location ហើយ Refresh', false);
-      }
+      const msg = err.code===1 ? '🚫 Allow Location ក្នុង Browser' :
+                  err.code===2 ? '📡 GPS Signal ខ្សោយ' : '⏱️ GPS Timeout';
+      const sub = err.code===1 ? 'Settings → Browser → Location' : 'ចុច 🔄 ដើម្បី Retry';
+      updateGPSUI('red', msg, sub, false);
     },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
   );
 }
 
 function updateGPSUI(color, label, sub, inRange) {
-  const dot    = document.getElementById('gpsDot');
-  const lbl    = document.getElementById('gpsProjectLabel');
-  const sb     = document.getElementById('gpsProjectSub');
-  const badge  = document.getElementById('gpsProjectBadge');
+  const dot          = document.getElementById('gpsDot');
+  const pulse        = document.getElementById('gpsPulse');
+  const lbl          = document.getElementById('gpsProjectLabel');
+  const sb           = document.getElementById('gpsProjectSub');
+  const badge        = document.getElementById('gpsProjectBadge');
+  const retry        = document.getElementById('gpsRetryBtn');
+  const assignedRow  = document.getElementById('gpsAssignedRow');
+  const assignedName = document.getElementById('gpsAssignedName');
   const colors = { green:'#10b981', orange:'#f59e0b', red:'#ef4444', blue:'#3b82f6' };
-  if (dot)   dot.style.background = colors[color] || '#94a3b8';
+  const col    = colors[color] || '#94a3b8';
+
+  if (dot) {
+    dot.style.background  = col;
+    dot.style.boxShadow   = color==='green' ? '0 0 8px rgba(16,185,129,.6)' : 'none';
+  }
+  if (pulse) {
+    pulse.style.background = col;
+    color === 'green' ? pulse.classList.add('pulsing') : pulse.classList.remove('pulsing');
+  }
   if (lbl)   lbl.textContent = label;
   if (sb)    sb.textContent  = sub;
-  if (badge) badge.style.display = inRange ? 'block' : 'none';
-  if (dot && color === 'green') dot.style.boxShadow = '0 0 8px rgba(16,185,129,.6)';
-  else if (dot) dot.style.boxShadow = 'none';
+  if (badge) badge.style.display = inRange ? 'inline-flex' : 'none';
+  if (retry) retry.style.display = (color==='red' || color==='orange') ? 'inline-block' : 'none';
+
+  // Show assigned-vs-detected row when GPS found a different project
+  if (assignedRow && assignedName && currentStaff) {
+    const assigned = (currentStaff.ProjectName || '').trim();
+    const detected = (_gpsDetected && _gpsDetected.project) ? (_gpsDetected.project.ProjectName || '').trim() : '';
+    if (inRange && assigned && detected && assigned !== detected) {
+      assignedName.textContent  = assigned;
+      assignedRow.style.display = 'block';
+    } else {
+      assignedRow.style.display = 'none';
+    }
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -1036,40 +1245,6 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('show');
   document.body.style.overflow = '';
 }
-
-// ══ GPS Guide ══
-function showGPSGuide() {
-  const modal = document.getElementById('gpsGuideModal');
-  if (!modal) return;
-  // Auto-detect iOS vs Android
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  switchGPSGuide(isIOS ? 'ios' : 'android');
-  modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-}
-
-function closeGPSGuide() {
-  const modal = document.getElementById('gpsGuideModal');
-  if (modal) modal.style.display = 'none';
-  document.body.style.overflow = '';
-}
-
-function switchGPSGuide(type) {
-  document.getElementById('gpsIosGuide').style.display     = type === 'ios'     ? 'block' : 'none';
-  document.getElementById('gpsAndroidGuide').style.display = type === 'android'  ? 'block' : 'none';
-  document.getElementById('btnShowIOS').style.background     = type === 'ios'    ? 'var(--accent)' : 'var(--surface2)';
-  document.getElementById('btnShowIOS').style.color          = type === 'ios'    ? '#fff'  : 'var(--text2)';
-  document.getElementById('btnShowIOS').style.borderColor    = type === 'ios'    ? 'var(--accent)' : 'var(--border)';
-  document.getElementById('btnShowAndroid').style.background = type === 'android'? 'var(--green)' : 'var(--surface2)';
-  document.getElementById('btnShowAndroid').style.color      = type === 'android'? '#fff'  : 'var(--text2)';
-  document.getElementById('btnShowAndroid').style.borderColor= type === 'android'? 'var(--green)' : 'var(--border)';
-}
-
-// Close GPS guide on overlay click
-document.addEventListener('click', function(e) {
-  const modal = document.getElementById('gpsGuideModal');
-  if (modal && e.target === modal) closeGPSGuide();
-});
 // Close on overlay click
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', function(e) {
@@ -1287,6 +1462,201 @@ function changePwd() {
 }
 
 // ════════════════════════════════════════════════
+// HISTORY TAB
+// ════════════════════════════════════════════════
+let _historyLoaded = false;
+
+function normalizeDate(raw) {
+  raw = String(raw||'').trim();
+  if (!raw) return '';
+  if (raw.includes('/')) {
+    const p = raw.split('/');
+    if (p[0].length === 4) return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0');
+    if (p.length === 3)    return p[2]+'-'+p[0].padStart(2,'0')+'-'+p[1].padStart(2,'0');
+  }
+  return raw.slice(0,10);
+}
+
+async function loadHistory(force) {
+  if (_historyLoaded && !force) return;
+  const list = document.getElementById('historyList');
+  if (!list || !currentStaff) return;
+  list.innerHTML = '<div class="hist-load"><i class="fas fa-circle-notch spin"></i> កំពុងទាញទិន្នន័យ...</div>';
+
+  try {
+    const r   = await fetch(SU + '?sheet=CheckIn&t=' + Date.now(), {redirect:'follow'});
+    const txt = await r.text();
+    const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
+
+    const id   = String(currentStaff.ID||'').trim();
+    const now  = new Date();
+    const cut  = new Date(now); cut.setDate(cut.getDate()-30);
+
+    // Filter: this staff, last 30 days
+    const rows = (j.data||[]).filter(x => {
+      if (String(x.ID||'').trim() !== id) return false;
+      const d = new Date(normalizeDate(x.Date));
+      return d >= cut && d <= now;
+    });
+
+    if (!rows.length) {
+      list.innerHTML = '<div class="hist-empty"><i class="fas fa-inbox"></i>មិនមានទិន្នន័យ 30 ថ្ងៃចុងក្រោយ</div>';
+      _historyLoaded = true; return;
+    }
+
+    // Group by date → { date: { in: row, out: row } }
+    const byDate = {};
+    rows.forEach(x => {
+      const d = normalizeDate(x.Date);
+      if (!byDate[d]) byDate[d] = { in: null, out: null };
+      const tp = (x.Type||x.type||'').toLowerCase();
+      if (tp === 'checkout' || tp === 'check out' || tp === 'out') {
+        if (!byDate[d].out) byDate[d].out = x;
+      } else {
+        if (!byDate[d].in) byDate[d].in = x;
+      }
+    });
+
+    // Sort dates descending
+    const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+
+    // Group by month for headers
+    const DOW_KH = ['អាទិត្យ','ច័ន្ទ','អង្គារ','ពុធ','ព្រហស្បតិ៍','សុក្រ','សៅរ៍'];
+    const MONTH_KH = ['មករា','កុម្ភៈ','មីនា','មេសា','ឧសភា','មិថុនា','កក្កដា','សីហា','កញ្ញា','តុលា','វិច្ឆិកា','ធ្នូ'];
+
+    let html = '';
+    let lastMonth = '';
+
+    dates.forEach(d => {
+      const dt   = new Date(d);
+      const mon  = MONTH_KH[dt.getMonth()] + ' ' + dt.getFullYear();
+      const day  = dt.getDate();
+      const dow  = DOW_KH[dt.getDay()];
+      const rec  = byDate[d];
+      const inT  = rec.in  ? (rec.in.Time  || rec.in.CheckIn  || '') : '';
+      const outT = rec.out ? (rec.out.Time || rec.out.CheckOut || '') : '';
+      const cls  = inT && outT ? 'present' : inT ? 'partial' : 'absent';
+      const proj = (rec.in||rec.out||{}).ProjectName || '';
+
+      if (mon !== lastMonth) {
+        html += `<div class="hist-month-label">${mon}</div>`;
+        lastMonth = mon;
+      }
+
+      html += `<div class="hist-item ${cls}">
+        <div class="hist-date-col">
+          <div class="hist-day">${day}</div>
+          <div class="hist-dow">${dow}</div>
+        </div>
+        <div class="hist-divider"></div>
+        <div class="hist-times">
+          <div class="hist-row">
+            <span class="hist-badge badge-in">IN</span>
+            <span class="hist-time-val">${inT || '—'}</span>
+          </div>
+          <div class="hist-row">
+            <span class="hist-badge badge-out">OUT</span>
+            <span class="hist-time-val">${outT || '—'}</span>
+          </div>
+          ${proj ? `<div class="hist-summary">📍 ${proj}</div>` : ''}
+        </div>
+      </div>`;
+    });
+
+    list.innerHTML = html;
+    _historyLoaded = true;
+  } catch(e) {
+    list.innerHTML = '<div class="hist-empty"><i class="fas fa-triangle-exclamation"></i>មានបញ្ហាទាញទិន្នន័យ</div>';
+    console.warn('loadHistory:', e);
+  }
+}
+
+// ════════════════════════════════════════════════
+// PROFILE PANEL
+// ════════════════════════════════════════════════
+function populateProfilePanel() {
+  if (!currentStaff) return;
+  const s = currentStaff;
+
+  // Sync large photo from home card
+  const src = document.getElementById('profilePhoto');
+  const lg  = document.getElementById('profilePhotoLarge');
+  if (lg && src) lg.innerHTML = src.innerHTML || src.textContent;
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val||'—'; };
+  set('profPanelName', s.Name);
+  set('profPanelId',   s.ID);
+  set('profPanelGmail',s.Gmail);
+  set('profPanelPos',  s.Position);
+  set('profPanelDept', s.Department);
+  set('profPanelProj', s._gpsProject ? s._gpsProject.ProjectName + ' (GPS)' : s.ProjectName);
+
+  const tags = [];
+  if (s.Position)   tags.push(`<span class="profile-tag tag-pos">${s.Position}</span>`);
+  if (s.Department) tags.push(`<span class="profile-tag tag-dept">${s.Department}</span>`);
+  if (s.ProjectName)tags.push(`<span class="profile-tag tag-proj">${s.ProjectName}</span>`);
+  const pt = document.getElementById('profPanelTags');
+  if (pt) pt.innerHTML = tags.join('');
+}
+
+function triggerPhotoChange() {
+  document.getElementById('profilePhotoInput').click();
+}
+
+async function handleProfilePhoto(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  if (file.size > 5 * 1024 * 1024) { showToast('⚠️ រូបភាពធំពេក (Max 5MB)','err'); return; }
+
+  showToast('📤 កំពុង Upload រូបភាព...','ok');
+
+  try {
+    // Read as base64
+    const base64 = await new Promise((res,rej) => {
+      const fr = new FileReader();
+      fr.onload  = () => res(fr.result.split(',')[1]);
+      fr.onerror = rej;
+      fr.readAsDataURL(file);
+    });
+
+    // Upload to Drive
+    const ur = await fetch(SU, {
+      method:'POST', mode:'cors', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({
+        action:   'uploadPhoto',
+        base64,
+        mimeType: file.type || 'image/jpeg',
+        fileName: 'Profile_' + currentStaff.ID + '_' + Date.now() + '.jpg',
+        folderId: '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y'
+      })
+    });
+    const uj = await ur.json();
+    if (uj.status !== 'ok') throw new Error(uj.msg || 'Upload failed');
+
+    const newUrl = uj.url || '';
+    // Update display immediately (local preview)
+    const imgStyle = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block';
+    const imgTag   = `<img src="${newUrl}" style="${imgStyle}" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.parentNode.textContent='${(currentStaff.Name||'?')[0]}'">`;
+    const pp  = document.getElementById('profilePhoto');
+    const ppl = document.getElementById('profilePhotoLarge');
+    const tav = document.getElementById('topAvatar');
+    if (pp)  pp.innerHTML  = imgTag;
+    if (ppl) ppl.innerHTML = imgTag;
+    if (tav) tav.innerHTML = imgTag;
+
+    // Save new URL to currentStaff for session
+    currentStaff.Photo = newUrl;
+    saveStaffSession();
+
+    showToast('✅ ប្ដូររូបភាព Profile ជោគជ័យ!','ok');
+  } catch(e) {
+    console.warn('handleProfilePhoto:', e);
+    showToast('❌ Upload បរាជ័យ — សូម​ព្យាយាម​ម្ដងទៀត','err');
+  }
+  input.value = '';
+}
+
+// ════════════════════════════════════════════════
 // PROFILE MENU
 // ════════════════════════════════════════════════
 function toggleProfileMenu() {
@@ -1300,11 +1670,14 @@ document.addEventListener('click', e => {
 });
 
 function doLogout() {
+  // Clear all session data — only called on explicit logout
   localStorage.removeItem('sp_session');
+  localStorage.removeItem('sp_cred');
   sessionStorage.removeItem('portal_staff');
   sessionStorage.removeItem('hr_gu');
   sessionStorage.removeItem('food_staff');
   currentStaff = null;
+  _historyLoaded = false;
   location.reload();
 }
 
@@ -1318,13 +1691,12 @@ function confirmLogout() {
 function showTab(tab) {
   ['home','history','profile'].forEach(t => {
     document.getElementById('nb-'+t).classList.toggle('active', t===tab);
+    const panel = document.getElementById(t+'Panel');
+    if (panel) panel.classList.toggle('active', t===tab);
   });
-  // Simple tab switching — scroll to section
-  if (tab === 'home') {
-    document.getElementById('appScroll').scrollTo({top:0,behavior:'smooth'});
-  } else if (tab === 'profile') {
-    showChangePwd();
-  }
+  document.getElementById('appScroll').scrollTo({top:0,behavior:'instant'});
+  if (tab === 'history') loadHistory();
+  if (tab === 'profile') populateProfilePanel();
 }
 
 // ════════════════════════════════════════════════
@@ -1361,62 +1733,49 @@ function showToast(msg, type) {
   if (location.protocol === 'file:') {
     const ml = document.getElementById('staffManifest');
     if (ml) ml.remove();
+    console.log('[PWA] Manifest removed for file:// protocol');
   }
 
-  // ══ PERSISTENT LOGIN (like Facebook) ══
-  // Session stays until user explicitly Logout
-  // Stored in localStorage — survives app close/restart
+  // ── Restore session (persistent login) ──
   const saved = localStorage.getItem('sp_session');
   if (saved) {
     try {
       const staff = JSON.parse(saved);
-      if (staff && staff.ID && staff.Gmail) {
-        currentStaff = staff;
-        // Show app immediately (fast boot)
-        document.getElementById('loginScreen').classList.add('hidden');
-        document.getElementById('appScreen').classList.remove('hidden');
-        initApp(staff);
-        // Silently refresh data in background
-        setTimeout(function() {
-          refreshStaffDataSilent(staff);
-        }, 2000);
-        return;
-      }
-    } catch(e) {
-      localStorage.removeItem('sp_session');
-    }
+      if (!staff || !staff.ID) throw new Error('Invalid session');
+      currentStaff = staff;
+      initApp(staff); // Load UI immediately from cached data
+
+      // Background refresh: silently update staff data from Sheet
+      // (keeps data fresh without forcing re-login)
+      setTimeout(async () => {
+        try {
+          const cred = localStorage.getItem('sp_cred');
+          if (!cred) return;
+          const { email } = JSON.parse(atob(cred));
+          if (!email) return;
+          const r = await fetch(SU + '?sheet=StaffInfo&t=' + Date.now(), { cache:'no-store' });
+          const j = await r.json();
+          if (!j || !j.data) return;
+          const fresh = j.data.find(s =>
+            (s.Gmail||'').toLowerCase().trim() === email.toLowerCase().trim()
+          );
+          if (fresh) {
+            currentStaff = fresh;
+            localStorage.setItem('sp_session', JSON.stringify(fresh));
+            console.log('[Session] Staff data refreshed silently');
+          }
+        } catch(e) { console.warn('[Session] Background refresh failed:', e); }
+      }, 3000); // 3 sec after UI loads
+
+      return;
+    } catch(e) { localStorage.removeItem('sp_session'); }
   }
 
-  // No session → show login
+  // Greeting time
   const h = new Date().getHours();
   const greet = h < 12 ? '🌅 អរុណសួស្ដី' : h < 17 ? '☀️ ទិវាសួស្ដី' : '🌙 សាយណ្ហសួស្ដី';
   document.getElementById('topGreet').textContent = greet;
 })();
-
-// Background refresh — update staff data without showing login
-async function refreshStaffDataSilent(staff) {
-  try {
-    const r   = await fetch(SU + '?sheet=StaffInfo&t=' + Date.now(), { method:'GET', cache:'no-store' });
-    const txt = await r.text();
-    const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
-    if (!j.data) return;
-    // Find updated staff record
-    const updated = j.data.find(s => {
-      const sg = (s.Gmail||'').toLowerCase().trim();
-      const cg = (staff.Gmail||'').toLowerCase().trim();
-      return sg === cg || String(s.ID).trim() === String(staff.ID).trim();
-    });
-    if (updated) {
-      currentStaff = updated;
-      localStorage.setItem('sp_session', JSON.stringify(updated));
-      // Refresh profile display silently
-      initApp(updated);
-    }
-  } catch(e) {
-    // Silent fail — cached session still works
-    console.warn('[Boot] Silent refresh failed:', e.message);
-  }
-}
 
 // ═══ PWA Install ═══
 let _pwaPrompt = null;
@@ -1476,6 +1835,95 @@ if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
     .catch(function(e) { console.warn('[SW] Failed:', e); });
 }
 
+// ════════════════════════════════════════════════
+// PULL TO REFRESH
+// ════════════════════════════════════════════════
+(function initPullToRefresh() {
+  const THRESHOLD   = 75;   // px drag needed to trigger refresh
+  const MAX_PULL    = 110;  // max drag distance
+  let startY        = 0;
+  let pulling       = false;
+  let triggered     = false;
+  let currentPull   = 0;
+
+  const indicator   = document.getElementById('ptrIndicator');
+  const label       = document.getElementById('ptrLabel');
+  const scrollEl    = document.getElementById('appScroll');
+  if (!indicator || !scrollEl) return;
+
+  function setIndicator(state, pullPct) {
+    indicator.className = '';
+    if (state === 'pulling') {
+      indicator.classList.add('ptr-pulling');
+      if (pullPct >= 1) {
+        indicator.classList.add('ptr-ready');
+        indicator.querySelector('.ptr-icon').textContent = '↑';
+        label.textContent = 'លែងដើម្បី Refresh';
+      } else {
+        indicator.querySelector('.ptr-icon').textContent = '↓';
+        label.textContent = 'ទាញចុះ Refresh';
+      }
+      // Slide indicator based on pull distance
+      const translateY = Math.min(pullPct * 60, 60) - 80;
+      indicator.style.transform = 'translateX(-50%) translateY(' + translateY + 'px)';
+    } else if (state === 'loading') {
+      indicator.classList.add('ptr-loading');
+      indicator.style.transform = '';
+      indicator.querySelector('.ptr-icon').textContent = '↻';
+      label.textContent = 'កំពុង Refresh...';
+    } else if (state === 'done') {
+      indicator.classList.add('ptr-done');
+      indicator.style.transform = '';
+      indicator.querySelector('.ptr-icon').textContent = '✓';
+      label.textContent = 'Refresh ជោគជ័យ!';
+    } else {
+      indicator.style.transform = '';
+      indicator.querySelector('.ptr-icon').textContent = '↓';
+      label.textContent = 'ទាញចុះ Refresh';
+    }
+  }
+
+  scrollEl.addEventListener('touchstart', function(e) {
+    if (scrollEl.scrollTop > 0) return; // only at top
+    startY   = e.touches[0].clientY;
+    pulling  = true;
+    triggered = false;
+    currentPull = 0;
+  }, { passive: true });
+
+  scrollEl.addEventListener('touchmove', function(e) {
+    if (!pulling) return;
+    if (scrollEl.scrollTop > 2) { pulling = false; return; }
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { pulling = false; return; }
+    currentPull = Math.min(dy * 0.6, MAX_PULL); // dampen pull
+    const pct = currentPull / THRESHOLD;
+    setIndicator('pulling', pct);
+    if (currentPull >= THRESHOLD) triggered = true;
+  }, { passive: true });
+
+  scrollEl.addEventListener('touchend', async function() {
+    if (!pulling) return;
+    pulling = false;
+    if (!triggered || currentPull < THRESHOLD) {
+      setIndicator('reset');
+      return;
+    }
+    // Trigger refresh
+    setIndicator('loading');
+    try {
+      if (currentStaff) {
+        await loadTodayStatus(currentStaff.ID);
+        await loadLeaveBalance(currentStaff.ID);
+      }
+    } catch(e) { console.warn('[PTR] Refresh error:', e); }
+    setIndicator('done');
+    setTimeout(() => setIndicator('reset'), 1500);
+    currentPull = 0;
+    triggered   = false;
+  });
+})();
+
 // ── Auto Sync every 30 seconds ──
 let _syncInterval = null;
 function startAutoSync() {
@@ -1495,68 +1943,5 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 </script>
-
-<!-- ══ GPS Permission Guide Modal ══ -->
-<div id="gpsGuideModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;align-items:flex-end;justify-content:center;">
-  <div style="background:var(--surface);border-radius:24px 24px 0 0;width:100%;max-width:480px;padding:0 0 max(20px,env(safe-area-inset-bottom));animation:slideUp .3s ease;">
-    <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 0;"></div>
-    <div style="padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
-      <div style="font-size:16px;font-weight:700;color:var(--text);">📍 Enable GPS Location</div>
-      <button onclick="closeGPSGuide()" style="background:var(--surface2);border:none;border-radius:50%;width:30px;height:30px;cursor:pointer;color:var(--text2);font-size:14px;">✕</button>
-    </div>
-    <div style="padding:16px 20px;max-height:70vh;overflow-y:auto;">
-
-      <!-- iOS Guide -->
-      <div id="gpsIosGuide">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-          <span style="font-size:22px;">🍎</span>
-          <div style="font-size:14px;font-weight:700;color:var(--text);">iPhone / iPad (Safari)</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <div class="gps-step"><span class="gps-num">1</span><div><b>Settings</b> → <b>Privacy & Security</b><br><span style="font-size:11px;color:var(--text2);">ចុច Settings ក្នុង iPhone</span></div></div>
-          <div class="gps-step"><span class="gps-num">2</span><div><b>Location Services</b> → <b>ON</b><br><span style="font-size:11px;color:var(--text2);">ត្រូវ Enable Location Services</span></div></div>
-          <div class="gps-step"><span class="gps-num">3</span><div><b>Safari</b> → <b>"While Using"</b><br><span style="font-size:11px;color:var(--text2);">ស្វែងរក Safari ក្នុង List</span></div></div>
-          <div class="gps-step"><span class="gps-num">4</span><div>ត្រឡប់ Safari → Refresh Page<br><span style="font-size:11px;color:var(--text2);">ចុច Reload ☁️ ក្នុង Address Bar</span></div></div>
-        </div>
-        <div style="margin-top:12px;padding:10px;background:rgba(59,130,246,.1);border-radius:10px;border-left:3px solid var(--accent);">
-          <div style="font-size:11px;color:#93c5fd;">💡 PWA (Home Screen App): Settings → Privacy → Location Services → LHB Staff → "While Using"</div>
-        </div>
-      </div>
-
-      <!-- Android Guide -->
-      <div id="gpsAndroidGuide" style="display:none;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-          <span style="font-size:22px;">🤖</span>
-          <div style="font-size:14px;font-weight:700;color:var(--text);">Android (Chrome)</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <div class="gps-step"><span class="gps-num">1</span><div>Chrome Address Bar → ចុច <b>🔒 Lock</b><br><span style="font-size:11px;color:var(--text2);">ឬចុច ⋮ → Settings → Site Settings</span></div></div>
-          <div class="gps-step"><span class="gps-num">2</span><div>ចុច <b>Permissions</b> → <b>Location</b><br><span style="font-size:11px;color:var(--text2);">ស្វែងរក Location ក្នុង list</span></div></div>
-          <div class="gps-step"><span class="gps-num">3</span><div>ជ្រើស <b>"Allow"</b><br><span style="font-size:11px;color:var(--text2);">ប្ដូរពី Block → Allow</span></div></div>
-          <div class="gps-step"><span class="gps-num">4</span><div>ចុច <b>Refresh</b> Page<br><span style="font-size:11px;color:var(--text2);">GPS នឹងដំណើរការភ្លាម</span></div></div>
-        </div>
-        <div style="margin-top:12px;padding:10px;background:rgba(16,185,129,.1);border-radius:10px;border-left:3px solid var(--green);">
-          <div style="font-size:11px;color:#6ee7b7;">💡 ប្រសិន Block នៅ System: Settings → Apps → Chrome → Permissions → Location → Allow</div>
-        </div>
-      </div>
-
-      <!-- Toggle iOS/Android -->
-      <div style="display:flex;gap:8px;margin-top:16px;">
-        <button id="btnShowIOS" onclick="switchGPSGuide('ios')" style="flex:1;padding:10px;border:1.5px solid var(--accent);border-radius:10px;background:var(--accent);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;">🍎 iOS</button>
-        <button id="btnShowAndroid" onclick="switchGPSGuide('android')" style="flex:1;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text2);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;">🤖 Android</button>
-      </div>
-
-      <button onclick="window.location.reload()" style="width:100%;margin-top:12px;padding:13px;background:linear-gradient(135deg,var(--green),#0a7a55);border:none;border-radius:12px;color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;">
-        🔄 Refresh Page
-      </button>
-    </div>
-  </div>
-</div>
-
-<style>
-.gps-step{display:flex;align-items:flex-start;gap:10px;background:var(--surface2);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);}
-.gps-num{min-width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-</style>
 </body>
 </html>
