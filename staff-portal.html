@@ -1807,18 +1807,31 @@ async function handleProfilePhoto(input) {
     currentStaff._photoFileId = newFileId;
     saveStaffSession();
 
-    // ── 5. Update StaffInfo Sheet (non-blocking) ──
-    fetch(SU, {
-      method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action:   'updateStaffPhoto',
-        gmail:    (currentStaff.Gmail || '').toLowerCase().trim(),
-        id:       currentStaff.ID     || '',
-        photoUrl: newUrl
-      })
-    }).catch(e => console.warn('[updateStaffPhoto]', e));
-
-    showToast('✅ ប្ដូររូបថត Profile ជោគជ័យ!', 'ok');
+    // ── 5. Update StaffInfo Sheet (blocking — user must know if it fails) ──
+    const driveUrl = newFileId
+      ? 'https://drive.google.com/file/d/' + newFileId + '/view?usp=sharing'
+      : newUrl;
+    try {
+      const sr = await fetch(SU, {
+        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action:   'updateStaffPhoto',
+          gmail:    (currentStaff.Gmail || '').toLowerCase().trim(),
+          id:       currentStaff.ID     || '',
+          photoUrl: driveUrl
+        })
+      });
+      const sj = await sr.json();
+      if (sj.status !== 'ok') {
+        console.warn('[updateStaffPhoto] Failed:', sj.msg);
+        showToast('⚠️ រក្សា Link Sheet: ' + (sj.msg || 'Error'), 'err');
+      } else {
+        showToast('✅ ប្ដូររូបថត Profile ជោគជ័យ!', 'ok');
+      }
+    } catch(e) {
+      console.warn('[updateStaffPhoto] Network error:', e);
+      showToast('✅ ប្ដូររូបថត Profile ជោគជ័យ! (Sheet sync error)', 'ok');
+    }
 
   } catch(e) {
     console.warn('handleProfilePhoto:', e);
