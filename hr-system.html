@@ -1097,18 +1097,27 @@ const PER_PAGE = 15;
 
 // ========== PERMISSION SYSTEM ==========
 // Role field from Google Sheet can be:
-//   "admin" | "manager"  → full access
-//   "Allow for Menu[វត្តមាន], Menu[ម្ហូប] & Dashboard Only"  → limited
-//   any text containing "Dashboard Only" → limited
+//   "admin"   → Full Control + Admin Tools
+//   "finance" → Full Control
+//   "hr"      → ទំព័រចម្បង + ការគ្រប់គ្រង + គម្រោង និងផ្នែក
+//   "manager" → Full Control (legacy)
+//   "Allow for Menu[...] & Dashboard Only" → limited (legacy)
 
 // Parse Role string → permission set
 function parsePermissions(roleStr) {
   const r = String(roleStr||'').trim().toLowerCase();
-  // Full access roles
-  if (r === 'admin' || r === 'manager') {
+
+  // ── Full Control roles ──
+  if (r === 'admin' || r === 'manager' || r === 'finance') {
     return { full: true, pages: ['dashboard','staff','attendance','leave','ot','project','structure','food','payroll','slip','reports','comment','workplace','evaluate'] };
   }
-  // Dashboard Only with specific menus
+
+  // ── HR: ទំព័រចម្បង + ការគ្រប់គ្រង + គម្រោង និងផ្នែក ──
+  if (r === 'hr') {
+    return { full: false, pages: ['dashboard','staff','attendance','leave','ot','project','structure','food'] };
+  }
+
+  // ── Legacy: Dashboard Only with specific menus ──
   if (r.includes('dashboard only') || r.includes('menu[')) {
     const pages = ['dashboard'];
     if (r.includes('វត្តមាន') || r.includes('attendance')) pages.push('attendance');
@@ -1120,8 +1129,9 @@ function parsePermissions(roleStr) {
     if (r.includes('សណ្ដាប់') || r.includes('workplace'))  pages.push('workplace');
     return { full: false, pages };
   }
-  // Default: full access (for backward compat)
-  return { full: true, pages: ['dashboard','staff','attendance','leave','ot','project','structure','food','payroll','slip','reports','comment','workplace'] };
+
+  // ── Default: full access (backward compat) ──
+  return { full: true, pages: ['dashboard','staff','attendance','leave','ot','project','structure','food','payroll','slip','reports','comment','workplace','evaluate'] };
 }
 
 // Apply permissions to sidebar nav after login
