@@ -1124,19 +1124,62 @@ function saveStaffSession() {
 }
 
 function buildQRNav(type) {
-  // Priority: GPS verified in-range project → staff assigned project → default
-  let proj = null;
-  if (_gpsDetected && _gpsDetected.project && _gpsDetected.project.inRange && !_gpsDetected.weakSignal) {
-    proj = _gpsDetected.project;  // GPS verified: within radius + accurate signal
+  // ══ Priority for ProjectName ══
+  // 1. _gpsConfirmed  — previously ✅ in-range (cached ≤15min)
+  // 2. _gpsDetected   — nearest GPS project (even outside radius) if within 500m & good signal
+  // 3. getStaffProject() — staff's assigned project (last resort)
+  let proj    = null;
+  let useGPS  = false;
+
+  const confirmFresh = _gpsConfirmed && (Date.now() - _gpsConfirmed.ts) < GPS_CONFIRM_AGE;
+
+  if (confirmFresh) {
+    // ✅ Previously confirmed in-range
+    proj   = _gpsConfirmed.project;
+    useGPS = true;
+    console.log('[GPS] buildQRNav → ✅ confirmed:', proj.ProjectName,
+                Math.round((Date.now()-_gpsConfirmed.ts)/1000)+'s ago');
+
+  } else if (_gpsDetected && _gpsDetected.project && !_gpsDetected.weakSignal
+             && (_gpsDetected.project.distance || 0) <= 500) {
+    // 📍 GPS sees nearest project within 500m — use it even if outside configured radius
+    // This is the main fix: project NAME from GPS, not staff assignment
+    proj   = _gpsDetected.project;
+    useGPS = true;
+    console.log('[GPS] buildQRNav → 📍 GPS nearest:', proj.ProjectName,
+                proj.distance+'m | inRange='+proj.inRange);
+
   } else {
-    proj = getStaffProject();     // fallback: Project sheet by staff.ProjectName
+    // 👤 Fallback: staff's assigned project from StaffInfo
+    proj   = getStaffProject();
+    useGPS = false;
+    console.log('[GPS] buildQRNav → 👤 staff assigned:', proj ? proj.ProjectName : 'none');
   }
+
+  const projName = proj
+    ? (proj.ProjectName || currentStaff.ProjectName || 'LHB')
+    : (currentStaff.ProjectName || 'LHB');
+
+  // ══ Effective Radius for qr-scan geo-fence ══
+  // If GPS is used but user is outside configured radius, expand radius to cover
+  // actual distance + GPS accuracy buffer so qr-scan validation doesn't block
+  let effRadius = proj ? (parseFloat(proj.Radius) || 100) : 100;
+  if (useGPS && _gpsDetected && _gpsDetected.project && !_gpsDetected.project.inRange) {
+    const dist = _gpsDetected.project.distance || 0;
+    const acc  = _gpsDetected.acc || 50;
+    effRadius  = Math.max(effRadius, dist + acc + 50); // actual dist + accuracy + 50m buffer
+    console.log('[GPS] buildQRNav → radius expanded to:', effRadius+'m',
+                '(dist='+dist+' acc='+acc+')');
+  }
+
+  console.log('[GPS] buildQRNav → FINAL → project:"'+projName+'" radius:'+effRadius+'m');
+
   return {
-    project:  proj ? (proj.ProjectName || currentStaff.ProjectName || 'LHB') : (currentStaff.ProjectName || 'LHB'),
+    project:  projName,
     type:     type,
-    lat:      proj ? (proj.Latitude  || '') : '',
-    lng:      proj ? (proj.Longitude || '') : '',
-    radius:   proj ? (proj.Radius    || 100) : 100,
+    lat:      proj ? (proj.Latitude  || proj.Lat || '') : '',
+    lng:      proj ? (proj.Longitude || proj.Lng || '') : '',
+    radius:   effRadius,
     location: proj ? (proj.Location  || proj.ProjectName || '') : '',
   };
 }
@@ -1186,11 +1229,13 @@ async function loadProjects() {
 }
 
 // ══ GPS Project Detection ══
-let _gpsWatcher  = null;
-let _gpsDetected = null;
-let _gpsReadings = [];       // rolling buffer for position stabilization
-const GPS_ACC_MAX = 80;      // reject fix if accuracy worse than 80 m
-const GPS_STABLE  = 3;       // readings needed before trusting position
+let _gpsWatcher   = null;
+let _gpsDetected  = null;
+let _gpsConfirmed = null;    // ✅ last confirmed in-range project (never overwritten by weak signal)
+let _gpsReadings  = [];      // rolling buffer for position stabilization
+const GPS_ACC_MAX      = 80;          // reject fix if accuracy worse than 80 m
+const GPS_STABLE       = 3;           // readings needed before trusting position
+const GPS_CONFIRM_AGE  = 15 * 60000;  // confirmed project valid for 15 minutes
 
 function calcDistGPS(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -1218,7 +1263,9 @@ function findNearestProject(lat, lng) {
 }
 
 function retryGPS() {
-  _gpsReadings = [];
+  _gpsReadings  = [];
+  _gpsDetected  = null;
+  _gpsConfirmed = null;   // reset confirmed so it re-detects fresh
   if (_gpsWatcher) { navigator.geolocation.clearWatch(_gpsWatcher); _gpsWatcher = null; }
   startGPSDetection();
 }
@@ -1260,8 +1307,15 @@ function startGPSDetection() {
       const aAcc = Math.round(_gpsReadings.reduce((s,r) => s+r.acc, 0) / n);
 
       // Reject fix if GPS accuracy is too weak to trust
+      // ✅ CRITICAL: Do NOT overwrite a previous good detection with project data —
+      // weak readings come in frequently and would wipe _gpsDetected.project,
+      // causing buildQRNav to fall back to staff-assigned project on Check In.
       if (aAcc > GPS_ACC_MAX) {
-        _gpsDetected = { lat:aLat, lng:aLng, acc:aAcc, project:null, weakSignal:true };
+        if (!_gpsDetected || !_gpsDetected.project) {
+          // No good data yet — store weak state
+          _gpsDetected = { lat:aLat, lng:aLng, acc:aAcc, project:null, weakSignal:true };
+        }
+        // Always show weak-signal UI so user knows accuracy is degraded
         updateGPSUI('orange', '📡 GPS ខ្សោយ', `±${aAcc}m — ត្រូវការ ≤${GPS_ACC_MAX}m`, false);
         return;
       }
@@ -1271,12 +1325,18 @@ function startGPSDetection() {
       if (proj) {
         _gpsDetected = { lat:aLat, lng:aLng, acc:aAcc, project:proj };
         if (proj.inRange) {
+          // ✅ Cache confirmed project — never lost to subsequent weak readings
+          _gpsConfirmed = { project: proj, ts: Date.now() };
           if (currentStaff && proj.ProjectName !== currentStaff.ProjectName) {
             currentStaff._gpsProject = proj;
           }
           updateGPSUI('green', '✅ ' + proj.ProjectName, `${proj.distance}m ពីគម្រោង | ±${aAcc}m`, true);
         } else {
-          updateGPSUI('orange', '📍 ' + proj.ProjectName, `ចម្ងាយ ${proj.distance}m | ±${aAcc}m`, false);
+          // Outside radius — keep showing confirmed project if recently confirmed
+          const label = (_gpsConfirmed && proj.ProjectName === _gpsConfirmed.project.ProjectName)
+            ? '✅ ' + proj.ProjectName  // still confirmed, just temporary drift
+            : '📍 ' + proj.ProjectName;
+          updateGPSUI('orange', label, `ចម្ងាយ ${proj.distance}m | ±${aAcc}m`, false);
         }
       } else {
         _gpsDetected = { lat:aLat, lng:aLng, acc:aAcc, project:null };
