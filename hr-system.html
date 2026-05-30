@@ -432,6 +432,7 @@ tbody tr:last-child td{border-bottom:none;}
             </select>
             <div class="search-box"><i class="fas fa-search"></i><input type="text" id="attSearch" placeholder="ស្វែងរក..." oninput="filterAttendance()"></div>
 
+            <button class="btn btn-outline btn-sm" onclick="openAttSettings()" title="កំណត់លក្ខណ​វត្តមាន"><i class="fas fa-sliders-h" style="margin-right:4px;"></i>កំណត់</button>
             <button class="btn btn-primary btn-sm" onclick="printAttendancePDF()"><i class="fas fa-file-pdf"></i>PDF</button>
             <button class="btn btn-outline btn-sm" onclick="exportAttCSV()"><i class="fas fa-file-excel"></i>Export</button>
           </div>
@@ -446,6 +447,149 @@ tbody tr:last-child td{border-bottom:none;}
       </div>
     </div>
 
+    <!-- ===== ATTENDANCE SETTINGS MODAL ===== -->
+    <div id="attSettingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;align-items:center;justify-content:center;" onclick="if(event.target===this)closeAttSettings()">
+      <div style="background:#fff;border-radius:16px;width:96%;max-width:760px;max-height:93vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3);">
+        <!-- Header -->
+        <div style="padding:14px 22px;display:flex;align-items:center;justify-content:space-between;background:var(--primary);">
+          <h3 style="color:#fff;font-size:16px;margin:0;"><i class="fas fa-sliders-h" style="margin-right:8px;color:var(--accent);"></i>កំណត់លក្ខណ​វត្តមាន</h3>
+          <button onclick="closeAttSettings()" style="background:rgba(255,255,255,.2);border:none;border-radius:6px;width:30px;height:30px;cursor:pointer;color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+        <!-- Tabs -->
+        <div style="display:flex;border-bottom:2px solid var(--border);background:#fff;">
+          <button id="attTab1" onclick="attSettingsTab(1)" style="flex:1;padding:11px 8px;border:none;border-bottom:3px solid var(--primary);background:#fff;color:var(--primary);cursor:pointer;font-family:var(--font-km);font-size:13px;font-weight:700;transition:.2s;">
+            <i class="fas fa-clock" style="margin-right:5px;"></i>ម៉ោងធ្វើការ
+          </button>
+          <button id="attTab2" onclick="attSettingsTab(2)" style="flex:1;padding:11px 8px;border:none;border-bottom:3px solid transparent;background:#fff;color:var(--text2);cursor:pointer;font-family:var(--font-km);font-size:13px;font-weight:400;transition:.2s;">
+            <i class="fas fa-clipboard-list" style="margin-right:5px;"></i>លក្ខណ​ការកាត់
+          </button>
+        </div>
+
+        <!-- TAB 1: Schedule Groups -->
+        <div id="attTabPane1" style="overflow-y:auto;flex:1;padding:18px 22px;">
+          <!-- Group A -->
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="background:#3b82f6;color:#fff;border-radius:6px;padding:2px 10px;font-size:12px;font-weight:700;">Group A</span>
+              <span style="color:var(--text2);font-size:12px;">— Check In 7:00am | Check Out 5:00pm</span>
+            </div>
+            <div style="display:grid;grid-template-columns:120px 120px 1fr;gap:10px;align-items:start;">
+              <div>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-sign-in-alt" style="color:#10b981;margin-right:3px;"></i>Check In</label>
+                <input type="time" id="attCfgCI_1" style="width:100%;padding:7px 8px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:14px;font-weight:700;color:var(--primary);">
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-sign-out-alt" style="color:#ef4444;margin-right:3px;"></i>Check Out</label>
+                <input type="time" id="attCfgCO_1" style="width:100%;padding:7px 8px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:14px;font-weight:700;color:var(--primary);">
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-building" style="margin-right:3px;"></i>ផ្នែក (១ ក្នុង ១ បន្ទាត់)</label>
+                <textarea id="attCfgDepts_1" rows="4" style="width:100%;padding:6px 8px;border:1.5px solid #bfdbfe;border-radius:7px;font-family:var(--font-km);font-size:12px;resize:vertical;"></textarea>
+              </div>
+            </div>
+          </div>
+          <!-- Group B -->
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="background:#10b981;color:#fff;border-radius:6px;padding:2px 10px;font-size:12px;font-weight:700;">Group B</span>
+              <span style="color:var(--text2);font-size:12px;">— Check In 8:00am | Check Out 5:00pm</span>
+            </div>
+            <div style="display:grid;grid-template-columns:120px 120px 1fr;gap:10px;align-items:start;">
+              <div>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-sign-in-alt" style="color:#10b981;margin-right:3px;"></i>Check In</label>
+                <input type="time" id="attCfgCI_2" style="width:100%;padding:7px 8px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:14px;font-weight:700;color:var(--primary);">
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-sign-out-alt" style="color:#ef4444;margin-right:3px;"></i>Check Out</label>
+                <input type="time" id="attCfgCO_2" style="width:100%;padding:7px 8px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:14px;font-weight:700;color:var(--primary);">
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-building" style="margin-right:3px;"></i>ផ្នែក (១ ក្នុង ១ បន្ទាត់)</label>
+                <textarea id="attCfgDepts_2" rows="5" style="width:100%;padding:6px 8px;border:1.5px solid #bbf7d0;border-radius:7px;font-family:var(--font-km);font-size:12px;resize:vertical;"></textarea>
+              </div>
+            </div>
+          </div>
+          <!-- Group C -->
+          <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px 16px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="background:#f59e0b;color:#fff;border-radius:6px;padding:2px 10px;font-size:12px;font-weight:700;">Group C</span>
+              <span style="color:var(--text2);font-size:12px;">— Check In 6:00am | Check Out 6:00pm</span>
+            </div>
+            <div style="display:grid;grid-template-columns:120px 120px 1fr;gap:10px;align-items:start;">
+              <div>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-sign-in-alt" style="color:#10b981;margin-right:3px;"></i>Check In</label>
+                <input type="time" id="attCfgCI_3" style="width:100%;padding:7px 8px;border:1.5px solid #fed7aa;border-radius:7px;font-size:14px;font-weight:700;color:var(--primary);">
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-sign-out-alt" style="color:#ef4444;margin-right:3px;"></i>Check Out</label>
+                <input type="time" id="attCfgCO_3" style="width:100%;padding:7px 8px;border:1.5px solid #fed7aa;border-radius:7px;font-size:14px;font-weight:700;color:var(--primary);">
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-building" style="margin-right:3px;"></i>ផ្នែក (១ ក្នុង ១ បន្ទាត់)</label>
+                <textarea id="attCfgDepts_3" rows="3" style="width:100%;padding:6px 8px;border:1.5px solid #fed7aa;border-radius:7px;font-family:var(--font-km);font-size:12px;resize:vertical;"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: Rules -->
+        <div id="attTabPane2" style="overflow-y:auto;flex:1;padding:18px 22px;display:none;">
+          <!-- Late Deduction -->
+          <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:16px;margin-bottom:14px;">
+            <div style="font-weight:700;color:#78350f;font-size:14px;margin-bottom:12px;"><i class="fas fa-stopwatch" style="margin-right:6px;color:#d97706;"></i>លក្ខណ​ការកាត់ប្រាក់ (ម៉ោងយឺត)</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
+              <div>
+                <label style="font-size:12px;color:var(--text2);font-weight:600;display:block;margin-bottom:4px;">ម៉ោងយឺតអនុញ្ញាត/ខែ</label>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" id="attCfgLateGrace" min="0" max="24" step="0.5"
+                    oninput="updateAttCfgFormula()"
+                    style="width:72px;padding:8px;border:1.5px solid #fcd34d;border-radius:8px;font-size:16px;font-weight:700;text-align:center;">
+                  <span style="color:var(--text2);font-size:13px;">ម៉ោង</span>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:12px;color:var(--text2);font-weight:600;display:block;margin-bottom:4px;">ក្រឡុក×ការកាត់</label>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" id="attCfgLateMult" min="1" max="10" step="0.5"
+                    oninput="updateAttCfgFormula()"
+                    style="width:72px;padding:8px;border:1.5px solid #fcd34d;border-radius:8px;font-size:16px;font-weight:700;text-align:center;">
+                  <span style="color:var(--text2);font-size:13px;">×</span>
+                </div>
+              </div>
+            </div>
+            <div style="background:#fef9c3;border-radius:8px;padding:10px 14px;font-size:12px;color:#713f12;line-height:1.8;border:1px dashed #fbbf24;">
+              <i class="fas fa-calculator" style="margin-right:6px;"></i>
+              <strong>រូបមន្ត:</strong>
+              ការកាត់ = (ម៉ោងយឺតសរុប &#8722; <strong id="cfgGraceDisplay">4</strong>ម៉ោង) × <strong id="cfgMultDisplay">2</strong> × (ប្រាក់ខែ ÷ ២៦ថ្ងៃ ÷ ៨ម៉ោង)
+            </div>
+          </div>
+          <!-- Half-Day Rule -->
+          <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:16px;">
+            <div style="font-weight:700;color:#0c4a6e;font-size:14px;margin-bottom:12px;"><i class="fas fa-calendar-minus" style="margin-right:6px;color:#0ea5e9;"></i>លក្ខណ​អវត្តមានពាក់កណ្ដាលថ្ងៃ (0.5 ថ្ងៃ)</div>
+            <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;cursor:pointer;padding:10px;background:#fff;border-radius:8px;border:1px solid #bae6fd;">
+              <input type="checkbox" id="attCfgHalfIn" style="width:18px;height:18px;margin-top:1px;cursor:pointer;accent-color:var(--primary);">
+              <span style="font-size:13px;line-height:1.6;color:var(--text);">
+                <strong style="color:#dc2626;">Check In = ❌</strong> &amp; <strong style="color:#16a34a;">Check Out = ✅</strong>
+                <br><span style="color:var(--text2);font-size:12px;">គ្មាន Check In ប៉ុន្ដែ​មាន Check Out → គិតអវត្តមាន 0.5 ថ្ងៃ</span>
+              </span>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;background:#fff;border-radius:8px;border:1px solid #bae6fd;">
+              <input type="checkbox" id="attCfgHalfOut" style="width:18px;height:18px;margin-top:1px;cursor:pointer;accent-color:var(--primary);">
+              <span style="font-size:13px;line-height:1.6;color:var(--text);">
+                <strong style="color:#16a34a;">Check In = ✅</strong> &amp; <strong style="color:#dc2626;">Check Out = ❌</strong>
+                <br><span style="color:var(--text2);font-size:12px;">មាន Check In ប៉ុន្ដែ​គ្មាន Check Out → គិតអវត្តមាន 0.5 ថ្ងៃ</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="padding:12px 22px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;background:#f8fafc;">
+          <button onclick="closeAttSettings()" class="btn btn-outline btn-sm">បោះបង់</button>
+          <button onclick="saveAttSettingsForm()" class="btn btn-primary btn-sm"><i class="fas fa-save" style="margin-right:4px;"></i>រក្សាទុក</button>
+        </div>
+      </div>
+    </div>
     <!-- ===== LEAVE ===== -->
     <div id="page-leave" class="page-content" style="display:none;">
       <div class="card">
@@ -544,25 +688,32 @@ tbody tr:last-child td{border-bottom:none;}
 
     <!-- ===== SLIP ===== -->
     <div id="page-slip" class="page-content" style="display:none;">
-      <div class="card" style="max-width:700px;margin:0 auto;">
-        <div class="card-header"><h3><i class="fas fa-file-invoice-dollar" style="color:var(--primary);margin-right:8px;"></i>បង្កើត Pay Slip</h3></div>
+      <div class="card" style="max-width:760px;margin:0 auto;">
+        <div class="card-header">
+          <h3><i class="fas fa-file-invoice-dollar" style="color:var(--primary);margin-right:8px;"></i>បង្កើត Pay Slip</h3>
+        </div>
         <div class="modal-body">
-          <div class="form-grid">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr 160px;">
             <div class="form-group">
               <label>ជ្រើសរើសបុគ្គលិក</label>
-              <select id="slipStaff" style="padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;"></select>
+              <select id="slipStaff" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;"></select>
             </div>
             <div class="form-group">
               <label>ជ្រើសរើសខែ</label>
-              <input type="month" id="slipMonth" style="padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;">
+              <input type="month" id="slipMonth" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;">
+            </div>
+            <div class="form-group">
+              <label>ប្រាក់បន្ថែម ($)</label>
+              <input type="number" id="slipAllowance" min="0" step="0.01" value="0" placeholder="0.00"
+                style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;">
             </div>
           </div>
-          <div style="display:flex;gap:10px;margin-top:16px;">
+          <div style="display:flex;gap:10px;margin-top:14px;">
             <button class="btn btn-primary" onclick="generateSlip()"><i class="fas fa-file-alt"></i>បង្កើត Slip</button>
             <button class="btn btn-success" onclick="printSlip()"><i class="fas fa-print"></i>Print</button>
           </div>
         </div>
-        <div id="slipPreview" style="padding:24px;display:none;"></div>
+        <div id="slipPreview" style="padding:24px 20px;display:none;"></div>
       </div>
     </div>
 
@@ -3464,6 +3615,103 @@ function recalcRow(inputEl) {
   netCell.textContent = '$' + Math.max(0, p.amount - pen).toFixed(2);
 }
 
+// ========== ATTENDANCE SETTINGS ==========
+const ATT_SETTINGS_KEY = 'lhb_attSettings_v1';
+
+function getAttSettings() {
+  try { const s = localStorage.getItem(ATT_SETTINGS_KEY); if (s) return JSON.parse(s); } catch(e) {}
+  return {
+    groups: [
+      { id:'A', checkIn:'07:00', checkOut:'17:00',
+        depts:'Production\nSite Aluminum\nSite Construction\nOperations\nStock\nSurveyor\nMEP' },
+      { id:'B', checkIn:'08:00', checkOut:'17:00',
+        depts:"Management\nFinance\nSale\nQuantity Surveyor\nAdministration\nArchitecture\nProcurement\nDocument Controller" },
+      { id:'C', checkIn:'06:00', checkOut:'18:00',
+        depts:"L'Cafe\nSecurity\nCleaner & Cook" },
+    ],
+    lateGraceHours: 4,
+    lateDeductMultiplier: 2,
+    halfDayNoCheckIn: true,
+    halfDayNoCheckOut: true,
+  };
+}
+function saveAttSettings(s) { localStorage.setItem(ATT_SETTINGS_KEY, JSON.stringify(s)); }
+
+function getDeptSchedule(dept) {
+  const cfg = getAttSettings();
+  const d = String(dept||'').trim().toLowerCase();
+  for (const g of cfg.groups) {
+    if (String(g.depts||'').split('\n').map(x=>x.trim().toLowerCase()).includes(d))
+      return { checkIn: g.checkIn, checkOut: g.checkOut };
+  }
+  return { checkIn:'08:00', checkOut:'17:00' };
+}
+
+function timeToMins(t) {
+  if (!t || t==='-') return null;
+  const m = String(t).trim().match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+  if (!m) return null;
+  let h=parseInt(m[1]), mn=parseInt(m[2]);
+  const ap=(m[3]||'').toUpperCase();
+  if (ap==='PM'&&h!==12) h+=12; if (ap==='AM'&&h===12) h=0;
+  return h*60+mn;
+}
+function calcLateMins(checkInTime, dept) {
+  const ciM = timeToMins(checkInTime); if (ciM===null) return 0;
+  const schedM = timeToMins(getDeptSchedule(dept).checkIn); if (schedM===null) return 0;
+  return Math.max(0, ciM - schedM);
+}
+function extractTimeGlobal(row) {
+  if (!row) return null;
+  if (row.Time && String(row.Time).match(/\d{1,2}:\d{2}/)) return row.Time;
+  if (row.Timestamp) { try { const d=new Date(row.Timestamp); if(!isNaN(d)) return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); } catch(e){} }
+  return null;
+}
+
+function openAttSettings() {
+  const s = getAttSettings();
+  document.getElementById('attSettingsModal').style.display = 'flex';
+  s.groups.forEach((g,i)=>{
+    const n=i+1;
+    const ci=document.getElementById('attCfgCI_'+n), co=document.getElementById('attCfgCO_'+n), dp=document.getElementById('attCfgDepts_'+n);
+    if(ci) ci.value=g.checkIn; if(co) co.value=g.checkOut; if(dp) dp.value=String(g.depts||'');
+  });
+  const ge=document.getElementById('attCfgLateGrace'), me=document.getElementById('attCfgLateMult');
+  if(ge) ge.value=s.lateGraceHours; if(me) me.value=s.lateDeductMultiplier;
+  const hi=document.getElementById('attCfgHalfIn'), ho=document.getElementById('attCfgHalfOut');
+  if(hi) hi.checked=s.halfDayNoCheckIn; if(ho) ho.checked=s.halfDayNoCheckOut;
+  updateAttCfgFormula(); attSettingsTab(1);
+}
+function closeAttSettings() { document.getElementById('attSettingsModal').style.display='none'; }
+
+function attSettingsTab(t) {
+  [1,2].forEach(i=>{
+    const pane=document.getElementById('attTabPane'+i), btn=document.getElementById('attTab'+i);
+    if(pane) pane.style.display=i===t?'block':'none';
+    if(btn){ btn.style.borderBottomColor=i===t?'var(--primary)':'transparent'; btn.style.color=i===t?'var(--primary)':'var(--text2)'; btn.style.fontWeight=i===t?'700':'400'; }
+  });
+}
+function updateAttCfgFormula() {
+  const g=document.getElementById('attCfgLateGrace'), m=document.getElementById('attCfgLateMult');
+  const gd=document.getElementById('cfgGraceDisplay'), md=document.getElementById('cfgMultDisplay');
+  if(g&&gd) gd.textContent=g.value; if(m&&md) md.textContent=m.value;
+}
+function saveAttSettingsForm() {
+  const s=getAttSettings();
+  s.groups.forEach((g,i)=>{
+    const n=i+1;
+    const ci=document.getElementById('attCfgCI_'+n), co=document.getElementById('attCfgCO_'+n), dp=document.getElementById('attCfgDepts_'+n);
+    if(ci) g.checkIn=ci.value; if(co) g.checkOut=co.value; if(dp) g.depts=dp.value.trim();
+  });
+  const ge=document.getElementById('attCfgLateGrace'), me=document.getElementById('attCfgLateMult');
+  if(ge) s.lateGraceHours=Number(ge.value)||4; if(me) s.lateDeductMultiplier=Number(me.value)||2;
+  const hi=document.getElementById('attCfgHalfIn'), ho=document.getElementById('attCfgHalfOut');
+  if(hi) s.halfDayNoCheckIn=hi.checked; if(ho) s.halfDayNoCheckOut=ho.checked;
+  saveAttSettings(s); closeAttSettings();
+  showToast('រក្សាទុកការកំណត់វត្តមានដោយជោគជ័យ!','success');
+  if(document.getElementById('page-attendance')&&document.getElementById('page-attendance').style.display!=='none') renderAttendance();
+}
+
 // ========== PAYROLL ==========
 function renderPayroll() { calculatePayroll(); }
 // ===== PAYROLL CONFIG =====
@@ -3475,29 +3723,57 @@ const WORK_END_MIN   = 17*60+0;     // 17:00 — ម៉ោងចេញ
 const EARLY_GRACE_MIN = 10;         // Early if out before 16:50
 
 function calcPayrollForStaff(s, month) {
-  const salary   = Number(s.Salary||0);
-  const perDay   = salary / PAYROLL_WORK_DAYS;
-  const perHour  = perDay / 8;
+  const salary  = Number(s.Salary||0);
+  const perDay  = salary / PAYROLL_WORK_DAYS;
+  const perHour = perDay / 8;
+  const cfg     = getAttSettings();
 
-  // Get attendance from CheckIn/CheckOut + Attendance sheets
-  const ciRows = (appData.checkin||[]).filter(c =>
+  // ── Rows for this staff/month ──
+  const ciRows  = (appData.checkin||[]).filter(c =>
     String(c.ID).trim() === String(s.ID).trim() && (!month || (c.Date||'').startsWith(month)));
-  const coRows = (appData.checkout||[]).filter(c =>
+  const coRows  = (appData.checkout||[]).filter(c =>
     String(c.ID).trim() === String(s.ID).trim() && (!month || (c.Date||'').startsWith(month)));
   const attRows = appData.attendance.filter(a =>
     a.ID === s.ID && (!month || (a.Date||'').startsWith(month)));
 
-  // Count present/absent
-  const presentDays = Math.max(ciRows.length,
-    attRows.filter(a=>['Present','Late','CheckedOut'].includes(a.Status)).length);
-  const absentDays  = Math.max(0, PAYROLL_WORK_DAYS - presentDays);
+  // ── Distinct dates ──
+  const toDate  = row => String(row.Date||row.Timestamp||'').split('T')[0];
+  const datesCI = new Set(ciRows.map(toDate).filter(Boolean));
+  const datesCO = new Set(coRows.map(toDate).filter(Boolean));
+  const leaveDates = new Set(attRows.filter(a=>a.Status==='Leave').map(a=>a.Date).filter(Boolean));
 
-  // Count OT hours from StaffOT sheet
+  // ── Present days (half-day logic) ──
+  let presentDays = 0;
+  const allDates = new Set([...datesCI, ...datesCO]);
+  allDates.forEach(d => {
+    if (leaveDates.has(d)) return;
+    const hasCi = datesCI.has(d), hasCo = datesCO.has(d);
+    if (hasCi && hasCo)       presentDays += 1;
+    else if (hasCi && !hasCo) presentDays += cfg.halfDayNoCheckOut ? 0.5 : 1;
+    else if (!hasCi && hasCo) presentDays += cfg.halfDayNoCheckIn  ? 0.5 : 1;
+  });
+  if (allDates.size === 0)
+    presentDays = attRows.filter(a=>['Present','Late','CheckedOut'].includes(a.Status)).length;
+  const leaveDays  = leaveDates.size;
+  const absentDays = Math.max(0, PAYROLL_WORK_DAYS - presentDays - leaveDays);
+
+  // ── Late deduction ──
+  // Sum late minutes from actual CI times vs dept schedule
+  const dept = String(s.Department||'');
+  let totalLateMinutes = 0;
+  ciRows.forEach(ci => {
+    const t = extractTimeGlobal(ci);
+    if (t) totalLateMinutes += calcLateMins(t, dept);
+  });
+  const graceMinutes  = cfg.lateGraceHours * 60;
+  const overMinutes   = Math.max(0, totalLateMinutes - graceMinutes);
+  const lateDeduction = (overMinutes / 60) * cfg.lateDeductMultiplier * perHour;
+  const totalLateHours = +(totalLateMinutes / 60).toFixed(2);
+
+  // ── OT hours ──
   const otHours = appData.ot
     .filter(o => o.ID===s.ID && (!month||(o.Date||'').startsWith(month)))
     .reduce((a,o) => a+Number(o.Hours||0), 0);
-
-  // Also calculate OT from CheckOut time
   let otFromCheckout = 0;
   coRows.forEach(co => {
     if(co.LateEarly && co.LateEarly.includes('OT')) {
@@ -3507,18 +3783,17 @@ function calcPayrollForStaff(s, month) {
   });
   const totalOT = Math.max(otHours, otFromCheckout);
 
-  // Deduction
-  const deduction = absentDays * perDay;
+  // ── Final totals ──
+  const absDeduction = absentDays * perDay;
+  const deduction    = absDeduction + lateDeduction;
+  const eligibleOT   = salary < PAYROLL_OT_SALARY_LIMIT;
+  const otPay        = eligibleOT ? totalOT * perHour * PAYROLL_OT_RATE : 0;
+  const amount       = Math.max(0, salary - deduction + otPay);
 
-  // OT Pay — only if Salary < $500
-  const eligibleOT = salary < PAYROLL_OT_SALARY_LIMIT;
-  const otPay = eligibleOT ? totalOT * perHour * PAYROLL_OT_RATE : 0;
-
-  const amount = Math.max(0, salary - deduction + otPay);
-
-  return { salary, perDay, presentDays, absentDays, totalOT, deduction, otPay, amount, eligibleOT };
+  return { salary, perDay, presentDays, absentDays, leaveDays,
+           totalOT, totalLateHours, absDeduction, lateDeduction,
+           deduction, otPay, amount, eligibleOT };
 }
-
 function calculatePayroll() {
   const month  = document.getElementById('payrollMonth').value;
   const filter = document.getElementById('payrollFilter').value;
@@ -3546,8 +3821,8 @@ function calculatePayroll() {
       <td>$${p.salary.toLocaleString()}</td>
       <td style="color:#10b981;font-weight:600;">${p.presentDays}ថ្ងៃ</td>
       <td style="color:#ef4444;">${p.absentDays}ថ្ងៃ</td>
-      <td>${p.totalOT>0?p.totalOT.toFixed(1):'0'}ម៉ោង ${otEligBadge}</td>
-      <td style="color:#ef4444;">$${p.deduction.toFixed(2)}</td>
+      <td>${p.totalOT>0?p.totalOT.toFixed(1):'0'}ម៉ោង ${otEligBadge}${p.totalLateHours>0?`<br><span style="font-size:10px;color:#f59e0b;" title="ម៉ោងយឺតសរុប"><i class="fas fa-clock"></i> យឺត ${p.totalLateHours}h</span>`:""}</td>
+      <td style="color:#ef4444;" title="អវត្តមាន: $${p.absDeduction.toFixed(2)} | យឺត: $${p.lateDeduction.toFixed(2)}">$${p.deduction.toFixed(2)}${p.lateDeduction>0?` <span style="font-size:10px;color:#f59e0b;" title="ការកាត់ម៉ោងយឺត">(+$${p.lateDeduction.toFixed(2)})</span>`:""}</td>
       <td style="color:#6366f1;">$${p.otPay.toFixed(2)}</td>
       <td style="background:#fffbeb;">
         <input type="number" min="0" step="0.01" value="${savedPenalty}"
@@ -3569,84 +3844,157 @@ function calculatePayroll() {
 
 // ========== SLIP ==========
 function generateSlip() {
-  const staffId = document.getElementById('slipStaff').value;
-  const month   = document.getElementById('slipMonth').value;
+  const staffId   = document.getElementById('slipStaff').value;
+  const month     = document.getElementById('slipMonth').value;
+  const allowance = Number(document.getElementById('slipAllowance')?.value || 0);
   const s = appData.staff.find(x => x.ID === staffId);
-  if (!s) { showToast('⚠️ សូមជ្រើសបុគ្គលិក', 'warning'); return; }
+  if (!s)    { showToast('⚠️ សូមជ្រើសបុគ្គលិក','warning'); return; }
+  if (!month){ showToast('⚠️ សូមជ្រើសខែ','warning'); return; }
 
-  // Use SAME calcPayrollForStaff as Payroll page
   const p = calcPayrollForStaff(s, month);
+  const penalty   = Number(localStorage.getItem('penalty_'+s.ID+'_'+month)||0);
+  const totalIn   = p.salary + allowance + p.otPay;
+  const totalOut  = p.absDeduction + p.lateDeduction + penalty;
+  const netFinal  = Math.max(0, totalIn - totalOut);
 
-  // Get penalty from payroll table if exists
-  const penaltyKey = 'penalty_' + s.ID + '_' + month;
-  const penalty = Number(localStorage.getItem(penaltyKey) || 0);
-  const netFinal = Math.max(0, p.amount - penalty);
+  const [yr, mo] = month.split('-');
+  const mNames   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const mLabel   = (mNames[parseInt(mo)-1]||mo) + ' ' + yr;
 
-  const preview = document.getElementById('slipPreview');
-  preview.style.display = 'block';
-  preview.innerHTML = `
-  <div class="payslip" id="payslipContent">
-    <div class="payslip-header" style="text-align:center;padding-bottom:16px;border-bottom:2px solid var(--primary);margin-bottom:16px;">
-      <h2 style="color:var(--primary);font-size:20px;"><i class="fas fa-building"></i> ក្រុមហ៊ុន HR System</h2>
-      <p style="font-size:16px;font-weight:700;color:var(--primary-light);margin-top:6px;">💰 Pay Slip — ${month}</p>
+  document.getElementById('slipPreview').style.display = 'block';
+  document.getElementById('slipPreview').innerHTML = `
+  <div id="payslipContent" style="font-family:'Kantumruy Pro',sans-serif;max-width:680px;margin:0 auto;border:2px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);">
+
+    <!-- ── HEADER ── -->
+    <div style="background:linear-gradient(135deg,#0f2540 0%,#1a3c5e 100%);padding:22px 32px;text-align:center;">
+      <div style="font-size:40px;font-weight:900;color:#f59e0b;letter-spacing:8px;font-family:'Outfit',sans-serif;line-height:1;">LHB</div>
+      <div style="color:rgba(255,255,255,.5);font-size:10px;letter-spacing:3px;margin-top:2px;text-transform:uppercase;">LHB Company</div>
+      <div style="margin-top:12px;">
+        <span style="background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.5);border-radius:20px;padding:5px 22px;color:#f59e0b;font-size:13px;font-weight:700;letter-spacing:1.5px;">
+          PAY SLIP FOR &nbsp;${mLabel.toUpperCase()}
+        </span>
+      </div>
     </div>
-    <table class="payslip-table" style="margin-bottom:16px;">
-      <tr><td style="font-weight:600;background:#f8faff;">ឈ្មោះ</td><td><strong>${s.Name}</strong></td><td style="font-weight:600;background:#f8faff;">ID</td><td>${s.ID}</td></tr>
-      <tr><td style="font-weight:600;background:#f8faff;">មុខតំណែង</td><td>${s.Position||'-'}</td><td style="font-weight:600;background:#f8faff;">ផ្នែក</td><td>${s.Department||'-'}</td></tr>
-      <tr><td style="font-weight:600;background:#f8faff;">ធនាគារ</td><td>${s.BankName||'-'}</td><td style="font-weight:600;background:#f8faff;">លេខគណនី</td><td>${s.BankNumber||'-'}</td></tr>
-      <tr><td style="font-weight:600;background:#f8faff;">ប្រាក់ខែគោល</td><td><strong>$${p.salary.toFixed(2)}</strong></td><td style="font-weight:600;background:#f8faff;">ថ្ងៃធ្វើការ</td><td>${PAYROLL_WORK_DAYS} ថ្ងៃ</td></tr>
-    </table>
-    <table class="payslip-table" style="margin-bottom:12px;">
-      <thead><tr>
-        <th style="background:var(--primary);color:#fff;">ការបន្ថែម</th>
-        <th style="background:var(--primary);color:#fff;">ចំនួន</th>
-        <th style="background:#ef4444;color:#fff;">ការកាត់</th>
-        <th style="background:#ef4444;color:#fff;">ចំនួន</th>
-      </tr></thead>
-      <tbody>
+
+    <!-- ── EMPLOYEE INFO ── -->
+    <div style="background:#f8fafc;padding:16px 28px;border-bottom:2px solid #e2e8f0;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#94a3b8;font-weight:700;margin-bottom:10px;"><i class="fas fa-id-card" style="margin-right:5px;"></i>ព័ត៌មានបុគ្គលិក</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 30px;">
+        <div><span style="font-size:11px;color:#94a3b8;display:block;">ឈ្មោះបុគ្គលិក</span><strong style="color:#0f2540;font-size:14px;">${s.Name}</strong></div>
+        <div><span style="font-size:11px;color:#94a3b8;display:block;">លេខ ID</span><strong style="color:#1a3c5e;">${s.ID}</strong></div>
+        <div><span style="font-size:11px;color:#94a3b8;display:block;">មុខតំណែង</span><span style="color:#334155;">${s.Position||'-'}</span></div>
+        <div><span style="font-size:11px;color:#94a3b8;display:block;">ផ្នែក</span><span style="color:#334155;">${s.Department||'-'}</span></div>
+        <div><span style="font-size:11px;color:#94a3b8;display:block;">ធនាគារ</span><span style="color:#334155;">${s.BankName||'-'}</span></div>
+        <div><span style="font-size:11px;color:#94a3b8;display:block;">លេខគណនី</span><span style="color:#334155;">${s.BankNumber||'-'}</span></div>
+      </div>
+    </div>
+
+    <!-- ── SALARY TABLE ── -->
+    <div style="padding:20px 28px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#94a3b8;font-weight:700;margin-bottom:12px;"><i class="fas fa-calculator" style="margin-right:5px;"></i>តារាងគណនាប្រាក់ខែ</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+
+        <!-- earnings header -->
         <tr>
-          <td>ប្រាក់ខែមូលដ្ឋាន</td>
-          <td style="color:#059669;font-weight:600;">$${p.salary.toFixed(2)}</td>
-          <td>អវត្តមាន (${p.absentDays}ថ្ងៃ)</td>
-          <td style="color:#ef4444;">$${p.deduction.toFixed(2)}</td>
+          <td colspan="2" style="background:#ecfdf5;color:#065f46;font-weight:700;font-size:11px;letter-spacing:1px;padding:8px 12px;border-radius:6px 6px 0 0;">
+            <i class="fas fa-plus-circle" style="margin-right:6px;"></i>ប្រាក់ចូល
+          </td>
         </tr>
+        <tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:10px 14px;color:#374151;">ប្រាក់ខែគោល</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:700;color:#059669;font-size:14px;">$${p.salary.toFixed(2)}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:10px 14px;color:#374151;">ប្រាក់បន្ថែម</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:700;color:#059669;font-size:14px;">$${allowance.toFixed(2)}</td>
+        </tr>
+        <tr style="border-bottom:2px solid #d1fae5;">
+          <td style="padding:10px 14px;color:#374151;">ប្រាក់ថែមម៉ោង <span style="font-size:11px;color:#94a3b8;">(OT ${p.totalOT.toFixed(1)}h × ×${PAYROLL_OT_RATE})</span></td>
+          <td style="padding:10px 14px;text-align:right;font-weight:700;color:#059669;font-size:14px;">$${p.otPay.toFixed(2)}</td>
+        </tr>
+
+        <!-- deductions header -->
         <tr>
-          <td>OT ${p.eligibleOT ? '('+p.totalOT.toFixed(1)+'ម៉ោង × x'+PAYROLL_OT_RATE+')' : '(មិនមានសិទ្ធិ)'}</td>
-          <td style="color:#6366f1;font-weight:600;">${p.eligibleOT ? '$'+p.otPay.toFixed(2) : '-'}</td>
-          <td>វិន័យ/ពិន័យ</td>
-          <td style="color:#ef4444;">${penalty > 0 ? '$'+penalty.toFixed(2) : '-'}</td>
+          <td colspan="2" style="background:#fef2f2;color:#991b1b;font-weight:700;font-size:11px;letter-spacing:1px;padding:8px 12px;">
+            <i class="fas fa-minus-circle" style="margin-right:6px;"></i>ការកាត់
+          </td>
         </tr>
-        <tr>
-          <td colspan="2"></td>
-          <td>វត្តមាន</td>
-          <td style="color:#059669;">${p.presentDays}ថ្ងៃ</td>
+        <tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:10px 14px;color:#374151;">ការកាត់អវត្តមាន <span style="font-size:11px;color:#94a3b8;">(${p.absentDays}ថ្ងៃ × $${p.perDay.toFixed(2)}/ថ្ងៃ)</span></td>
+          <td style="padding:10px 14px;text-align:right;font-weight:700;color:#ef4444;font-size:14px;">$${p.absDeduction.toFixed(2)}</td>
         </tr>
-      </tbody>
-      <tfoot>
-        <tr style="background:var(--primary);color:#fff;font-weight:700;font-size:16px;">
-          <td colspan="3" style="padding:12px;">💰 សរុបសុទ្ធ</td>
-          <td style="padding:12px;font-size:18px;">$${netFinal.toFixed(2)}</td>
+        <tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:10px 14px;color:#374151;">ការកាត់មកយឺត <span style="font-size:11px;color:#94a3b8;">(${p.totalLateHours.toFixed(1)}h)</span></td>
+          <td style="padding:10px 14px;text-align:right;font-weight:700;color:#ef4444;font-size:14px;">$${p.lateDeduction.toFixed(2)}</td>
         </tr>
-      </tfoot>
-    </table>
-    <p style="margin-top:16px;font-size:12px;color:var(--text2);text-align:right;">
-      ${p.eligibleOT ? '✅ OT Rate: x'+PAYROLL_OT_RATE+' (Salary < $'+PAYROLL_OT_SALARY_LIMIT+')' : '❌ គ្មានសិទ្ធិ OT (Salary ≥ $'+PAYROLL_OT_SALARY_LIMIT+')'}<br>
-      បង្កើតថ្ងៃ: ${new Date().toLocaleDateString('km-KH')}
-    </p>
+        <tr style="border-bottom:2px solid #fee2e2;">
+          <td style="padding:10px 14px;color:#374151;">ការកាត់ពិន័យ</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:700;color:#ef4444;font-size:14px;">$${penalty.toFixed(2)}</td>
+        </tr>
+
+        <!-- NET TOTAL -->
+        <tr style="background:linear-gradient(135deg,#0f2540,#1a3c5e);">
+          <td style="padding:16px 14px;color:#fff;font-weight:700;font-size:15px;">
+            <i class="fas fa-coins" style="color:#f59e0b;margin-right:8px;"></i>សរុបប្រាក់ទទួលបាន
+          </td>
+          <td style="padding:16px 14px;text-align:right;color:#f59e0b;font-weight:900;font-size:22px;font-family:'Outfit',sans-serif;">
+            $${netFinal.toFixed(2)}
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── SIGNATURE ── -->
+    <div style="padding:18px 28px 26px;border-top:2px solid #e2e8f0;background:#fafafa;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:4px;">
+        <div style="text-align:center;">
+          <div style="font-size:12px;color:#64748b;font-weight:700;margin-bottom:44px;letter-spacing:.5px;">ហត្ថលេខាគណនី</div>
+          <div style="border-top:1.5px solid #334155;padding-top:8px;">
+            <div style="font-size:12px;color:#374151;font-weight:600;">ឈ្មោះ: _______________________</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:5px;"> កាលបរិច្ឆេទ: ____ / ____ / ________</div>
+          </div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:12px;color:#64748b;font-weight:700;margin-bottom:44px;letter-spacing:.5px;">ហត្ថលេខាបុគ្គលិក</div>
+          <div style="border-top:1.5px solid #334155;padding-top:8px;">
+            <div style="font-size:12px;color:#374151;font-weight:600;">ឈ្មោះ: ${s.Name}</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:5px;"> កាលបរិច្ឆេទ: ____ / ____ / ________</div>
+          </div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:18px;font-size:10px;color:#cbd5e1;letter-spacing:.5px;">
+        បង្កើតថ្ងៃ: ${new Date().toLocaleDateString('km-KH')} &nbsp;|&nbsp; LHB HR System
+      </div>
+    </div>
+
   </div>`;
 }
 function printSlip() {
   const content = document.getElementById('payslipContent');
-  if (!content) { showToast('⚠️ សូម Generate Slip ជាមុនសិន', 'warning'); return; }
-  const w = window.open('','','width=700,height=800');
-  w.document.write(`<html><head><title>Pay Slip</title>
-  <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>body{font-family:'Kantumruy Pro',sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}td,th{border:1px solid #ccc;padding:8px;}th{background:#f5f5f5;}.total{background:#1a3c5e;color:#fff;font-weight:700;}</style>
-  </head><body>${content.outerHTML}
-</body></html>`);
-  w.document.close(); w.print();
+  if (!content) { showToast('⚠️ សូម Generate Slip ជាមុនសិន','warning'); return; }
+  const w = window.open('','_blank','width=800,height=950');
+  w.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>Pay Slip — LHB</title>
+    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&family=Outfit:wght@700;900&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0;}
+      body{font-family:'Kantumruy Pro',sans-serif;background:#fff;padding:24px;}
+      table{width:100%;border-collapse:collapse;}
+      @media print{
+        body{padding:0;}
+        @page{margin:12mm;size:A4;}
+      }
+    </style>
+  </head><body>
+    ${content.outerHTML}
+    <script>
+      window.onload = function(){ setTimeout(function(){ window.print(); }, 700); }
+    <\/script>
+  </body></html>`);
+  w.document.close();
 }
-
 // ========== REPORTS ==========
 function generateReport() {
   const type = document.getElementById('reportType').value;
