@@ -217,7 +217,8 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 .photo-placeholder p{font-size:13px;color:var(--text2);margin-top:8px;}
 
 /* ── Toast ── */
-.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--surface);border:1px solid var(--border);border-radius:var(--r12);padding:12px 20px;font-size:13px;font-weight:600;z-index:999;transition:.3s;white-space:nowrap;box-shadow:0 8px 32px rgba(0,0,0,.4);}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--surface);border:1px solid var(--border);border-radius:var(--r12);padding:12px 20px;font-size:13px;font-weight:600;z-index:999;transition:.3s;white-space:nowrap;box-shadow:0 8px 32px rgba(0,0,0,.4);max-width:90vw;}
+.toast.err,.toast.warn{white-space:normal;text-align:center;}
 .toast.show{transform:translateX(-50%) translateY(0);}
 .toast.ok{border-color:rgba(16,185,129,.4);color:var(--green);}
 .toast.err{border-color:rgba(239,68,68,.4);color:#fca5a5;}
@@ -1124,78 +1125,100 @@ function saveStaffSession() {
 }
 
 function buildQRNav(type) {
-  // ══ Priority for ProjectName ══
-  // 1. _gpsConfirmed  — previously ✅ in-range (cached ≤15min)
-  // 2. _gpsDetected   — nearest GPS project (even outside radius) if within 500m & good signal
-  // 3. getStaffProject() — staff's assigned project (last resort)
-  let proj    = null;
-  let useGPS  = false;
-
+  // ══ STRICT GPS MODE ══
+  // GPS ចាំបាច់ — ត្រូវ Confirm in-range ជាមុន
+  // មិនមាន Fallback ទៅ Staff Assignment ទេ
+  // Radius មិន Expand ទេ — ប្រើតាម Google Sheet ហ្មត់ចត់
   const confirmFresh = _gpsConfirmed && (Date.now() - _gpsConfirmed.ts) < GPS_CONFIRM_AGE;
+  if (!confirmFresh) return null;   // GPS not confirmed in-range → block caller
 
-  if (confirmFresh) {
-    // ✅ Previously confirmed in-range
-    proj   = _gpsConfirmed.project;
-    useGPS = true;
-    console.log('[GPS] buildQRNav → ✅ confirmed:', proj.ProjectName,
-                Math.round((Date.now()-_gpsConfirmed.ts)/1000)+'s ago');
+  const proj   = _gpsConfirmed.project;
+  const radius = parseFloat(proj.Radius || proj.radius) || 100;  // exact Sheet value
 
-  } else if (_gpsDetected && _gpsDetected.project && !_gpsDetected.weakSignal
-             && (_gpsDetected.project.distance || 0) <= 500) {
-    // 📍 GPS sees nearest project within 500m — use it even if outside configured radius
-    // This is the main fix: project NAME from GPS, not staff assignment
-    proj   = _gpsDetected.project;
-    useGPS = true;
-    console.log('[GPS] buildQRNav → 📍 GPS nearest:', proj.ProjectName,
-                proj.distance+'m | inRange='+proj.inRange);
-
-  } else {
-    // 👤 Fallback: staff's assigned project from StaffInfo
-    proj   = getStaffProject();
-    useGPS = false;
-    console.log('[GPS] buildQRNav → 👤 staff assigned:', proj ? proj.ProjectName : 'none');
-  }
-
-  const projName = proj
-    ? (proj.ProjectName || currentStaff.ProjectName || 'LHB')
-    : (currentStaff.ProjectName || 'LHB');
-
-  // ══ Effective Radius for qr-scan geo-fence ══
-  // If GPS is used but user is outside configured radius, expand radius to cover
-  // actual distance + GPS accuracy buffer so qr-scan validation doesn't block
-  let effRadius = proj ? (parseFloat(proj.Radius) || 100) : 100;
-  if (useGPS && _gpsDetected && _gpsDetected.project && !_gpsDetected.project.inRange) {
-    const dist = _gpsDetected.project.distance || 0;
-    const acc  = _gpsDetected.acc || 50;
-    effRadius  = Math.max(effRadius, dist + acc + 50); // actual dist + accuracy + 50m buffer
-    console.log('[GPS] buildQRNav → radius expanded to:', effRadius+'m',
-                '(dist='+dist+' acc='+acc+')');
-  }
-
-  console.log('[GPS] buildQRNav → FINAL → project:"'+projName+'" radius:'+effRadius+'m');
+  console.log('[GPS] buildQRNav → ✅ confirmed:', proj.ProjectName,
+              Math.round((Date.now()-_gpsConfirmed.ts)/1000)+'s ago');
+  console.log('[GPS] buildQRNav → FINAL → project:"'+proj.ProjectName+'" radius:'+radius+'m');
 
   return {
-    project:  projName,
+    project:  proj.ProjectName || '',
     type:     type,
-    lat:      proj ? (proj.Latitude  || proj.Lat || '') : '',
-    lng:      proj ? (proj.Longitude || proj.Lng || '') : '',
-    radius:   effRadius,
-    location: proj ? (proj.Location  || proj.ProjectName || '') : '',
+    lat:      proj.Latitude  || proj.Lat  || '',
+    lng:      proj.Longitude || proj.Lng  || '',
+    radius:   radius,
+    location: proj.Location  || proj.ProjectName || '',
   };
+}
+
+// ════════════════════════════════════════════════
+// GPS State helper — for Check In/Out gating
+// ════════════════════════════════════════════════
+function getGPSGateStatus() {
+  // 1. Browser / permission issue
+  if (!navigator.geolocation) return { ok:false, code:'no_browser' };
+  if (!_gpsWatcher)            return { ok:false, code:'not_running' };
+
+  // 2. Confirmed in-range (allow)
+  const confirmFresh = _gpsConfirmed && (Date.now() - _gpsConfirmed.ts) < GPS_CONFIRM_AGE;
+  if (confirmFresh) return { ok:true, code:'confirmed', proj:_gpsConfirmed.project };
+
+  // 3. Still calibrating
+  if (_gpsReadings.length < GPS_STABLE) return { ok:false, code:'calibrating' };
+
+  // 4. Weak signal (latest check — may have preserved old data)
+  if (_gpsDetected && _gpsDetected.weakSignal && !_gpsDetected.project) {
+    return { ok:false, code:'weak', acc: _gpsDetected.acc };
+  }
+
+  // 5. Outside configured radius
+  if (_gpsDetected && _gpsDetected.project && !_gpsDetected.project.inRange) {
+    return {
+      ok:    false,
+      code:  'outside',
+      proj:  _gpsDetected.project,
+      dist:  _gpsDetected.project.distance || 0,
+      rad:   parseFloat(_gpsDetected.project.Radius || _gpsDetected.project.radius) || 100,
+    };
+  }
+
+  // 6. GPS running but no project found nearby
+  if (_gpsDetected && !_gpsDetected.project) return { ok:false, code:'no_project' };
+
+  return { ok:false, code:'detecting' };
 }
 
 function goCheckIn() {
   if (!currentStaff) { showToast('⚠️ សូម Login ជាមុន','err'); return; }
+  const gs = getGPSGateStatus();
+  if (!gs.ok) { _showGPSBlockMsg(gs, 'Check In'); return; }
   saveStaffSession();
   const qd = buildQRNav('checkin');
+  if (!qd) { showToast('🚫 GPS ត្រូវការ Check In — សូម Retry', 'err'); return; }
   window.location.href = BASE_URL + '/qr-scan.html?d=' + encodeURIComponent(JSON.stringify(qd));
 }
 
 function goCheckOut() {
   if (!currentStaff) { showToast('⚠️ សូម Login ជាមុន','err'); return; }
+  const gs = getGPSGateStatus();
+  if (!gs.ok) { _showGPSBlockMsg(gs, 'Check Out'); return; }
   saveStaffSession();
   const qd = buildQRNav('checkout');
+  if (!qd) { showToast('🚫 GPS ត្រូវការ Check Out — សូម Retry', 'err'); return; }
   window.location.href = BASE_URL + '/qr-scan.html?d=' + encodeURIComponent(JSON.stringify(qd));
+}
+
+function _showGPSBlockMsg(gs, action) {
+  const msgs = {
+    no_browser:  `🚫 Browser មិន Support GPS — ${action} មិនអាចធ្វើបាន`,
+    not_running: `🚫 GPS មិនដំណើរការ — ចុច 🔄 Retry`,
+    calibrating: `⏳ GPS កំពុង Calibrate — សូមរង់ចាំ...`,
+    weak:        `📡 GPS Signal ខ្សោយ (±${gs.acc||'?'}m) — ${action} មិនអនុញ្ញាត`,
+    outside:     `🚫 ក្រៅតំបន់! ${gs.dist}m > ${gs.rad}m — ${action} ❌`,
+    no_project:  `🚫 GPS រក់គ្មានគម្រោងជិត — ${action} មិនអនុញ្ញាត`,
+    detecting:   `⏳ GPS កំពុង Detect — សូមរង់ចាំ...`,
+  };
+  const msg = msgs[gs.code] || `🚫 GPS ត្រូវការ ${action}`;
+  showToast(msg, gs.code === 'outside' || gs.code === 'no_browser' || gs.code === 'not_running'
+                 ? 'err' : 'warn');
 }
 
 function goFood() {
@@ -1981,7 +2004,9 @@ function showToast(msg, type) {
   t.textContent = msg;
   t.className = 'toast show ' + (type||'');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+  // err/warn messages stay longer so user can read GPS reason
+  const dur = (type === 'err' || type === 'warn') ? 4500 : 3000;
+  _toastTimer = setTimeout(() => t.classList.remove('show'), dur);
 }
 
 // ════════════════════════════════════════════════
