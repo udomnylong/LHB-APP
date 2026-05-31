@@ -2391,14 +2391,35 @@ function renderAttendance() {
     });
     const coRow = coRows.length > 0 ? coRows[coRows.length-1] : null; // latest only
 
-    // Helper: extract HH:MM from Time field or Timestamp
+    // Helper: extract & normalize HH:MM (24h) from Time field or Timestamp
     const extractTime = (row) => {
-      if(!row) return null;
-      if(row.Time && row.Time.match(/\d{1,2}:\d{2}/)) return row.Time;
-      if(row.Timestamp) {
+      if (!row) return null;
+      const _parseT = (raw) => {
+        if (raw === undefined || raw === null || raw === '') return null;
+        const t = String(raw).trim();
+        const m1 = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+        if (m1) return String(parseInt(m1[1])).padStart(2,'0') + ':' + m1[2];
+        const m2 = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+        if (m2) {
+          let h = parseInt(m2[1]);
+          const ap = m2[3].toUpperCase();
+          if (ap==='PM' && h!==12) h+=12;
+          if (ap==='AM' && h===12) h=0;
+          return String(h).padStart(2,'0') + ':' + m2[2];
+        }
+        const num = parseFloat(t);
+        if (!isNaN(num) && num >= 0 && num < 1) {
+          const tm = Math.round(num * 1440);
+          return String(Math.floor(tm/60)).padStart(2,'0') + ':' + String(tm%60).padStart(2,'0');
+        }
+        return null;
+      };
+      const ft = _parseT(row.Time);
+      if (ft) return ft;
+      if (row.Timestamp) {
         try {
           const d = new Date(row.Timestamp);
-          if(!isNaN(d)) return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+          if (!isNaN(d)) return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
         } catch(e){}
       }
       return null;
@@ -3663,8 +3684,38 @@ function calcLateMins(checkInTime, dept) {
 }
 function extractTimeGlobal(row) {
   if (!row) return null;
-  if (row.Time && String(row.Time).match(/\d{1,2}:\d{2}/)) return row.Time;
-  if (row.Timestamp) { try { const d=new Date(row.Timestamp); if(!isNaN(d)) return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); } catch(e){} }
+  // Normalize any time format → HH:MM (24h)
+  const _parseT = (raw) => {
+    if (raw === undefined || raw === null || raw === '') return null;
+    const t = String(raw).trim();
+    // HH:MM or H:MM with optional seconds  e.g. "07:15" / "7:15:00"
+    const m1 = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (m1) return String(parseInt(m1[1])).padStart(2,'0') + ':' + m1[2];
+    // 12h format e.g. "7:15 AM" / "07:15:00 PM"
+    const m2 = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+    if (m2) {
+      let h = parseInt(m2[1]);
+      const ap = m2[3].toUpperCase();
+      if (ap==='PM' && h!==12) h+=12;
+      if (ap==='AM' && h===12) h=0;
+      return String(h).padStart(2,'0') + ':' + m2[2];
+    }
+    // Google Sheets decimal fraction of day e.g. 0.302083 = 07:15
+    const num = parseFloat(t);
+    if (!isNaN(num) && num >= 0 && num < 1) {
+      const tm = Math.round(num * 1440);
+      return String(Math.floor(tm/60)).padStart(2,'0') + ':' + String(tm%60).padStart(2,'0');
+    }
+    return null;
+  };
+  const fromTime = _parseT(row.Time);
+  if (fromTime) return fromTime;
+  if (row.Timestamp) {
+    try {
+      const d = new Date(row.Timestamp);
+      if (!isNaN(d)) return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    } catch(e){}
+  }
   return null;
 }
 
@@ -4491,22 +4542,26 @@ function tpNow() {
   tpSync();
 }
 function tpSync() {
-  const hr = document.getElementById('tpHour').value;
-  const mn = document.getElementById('tpMin').value;
-  document.getElementById('tpTimeValue').value = hr+':'+mn;
-  // Show late/early
+  const hr  = document.getElementById('tpHour').value;
+  const mn  = document.getElementById('tpMin').value;
+  document.getElementById('tpTimeValue').value = hr + ':' + mn;
   const tot = parseInt(hr)*60 + parseInt(mn);
+  // Use dept-specific schedule
+  const _staff = (appData.staff||[]).find(x => x.ID === _tpId) || {};
+  const sched  = (typeof getDeptSchedule === 'function')
+    ? getDeptSchedule(_staff.Department || '')
+    : { checkIn:'07:00', checkOut:'17:00' };
+  const stMins = (typeof timeToMins === 'function') ? (timeToMins(sched.checkIn)  || 7*60)  : 7*60;
+  const etMins = (typeof timeToMins === 'function') ? (timeToMins(sched.checkOut) || 17*60) : 17*60;
   const disp = document.getElementById('tpLate');
   let msg='', bg='', col='';
-  if (_tpType==='checkin') {
-    const st=7*60+15;
-    if(tot>st){msg='⚠️ Late '+(tot-st)+' min'; bg='#422006'; col='#fbbf24';}
-    else{msg='✅ OnTime'; bg='#052e16'; col='#34d399';}
+  if (_tpType === 'checkin') {
+    if (tot > stMins) { msg='⚠️ Late '+(tot-stMins)+' min'; bg='#422006'; col='#fbbf24'; }
+    else              { msg='✅ OnTime'; bg='#052e16'; col='#34d399'; }
   } else {
-    const et=17*60;
-    if(tot<et-10){msg='🔶 Early '+(et-tot)+' min'; bg='#3b0764'; col='#c084fc';}
-    else if(tot>et){msg='💪 OT '+(tot-et)+' min'; bg='#1e1b4b'; col='#818cf8';}
-    else{msg='✅ OnTime'; bg='#052e16'; col='#34d399';}
+    if      (tot < etMins-10) { msg='🔶 Early '+(etMins-tot)+' min'; bg='#3b0764'; col='#c084fc'; }
+    else if (tot > etMins)    { msg='💪 OT '+(tot-etMins)+' min';    bg='#1e1b4b'; col='#818cf8'; }
+    else                      { msg='✅ OnTime'; bg='#052e16'; col='#34d399'; }
   }
   disp.style.display='block'; disp.style.background=bg; disp.style.color=col; disp.textContent=msg;
 }
@@ -4519,13 +4574,30 @@ async function tpSave() {
   const isCI   = _tpType==='checkin';
   const _tpp   = time.split(':').map(Number);
   const tot    = _tpp[0]*60+_tpp[1];
-  let lateEarly='OnTime', status='Present';
-  if(isCI){const st=7*60+15; if(tot>st){lateEarly='Late '+(tot-st)+'min';status='Late';}}
-  else{const et=17*60; if(tot<et-10)lateEarly='Early '+(et-tot)+'min'; else if(tot>et)lateEarly='OT '+(tot-et)+'min';}
+  // Use dept-specific schedule for lateEarly calculation
+  const _sched  = (typeof getDeptSchedule === 'function')
+    ? getDeptSchedule(s.Department || '')
+    : { checkIn:'07:00', checkOut:'17:00' };
+  const _stMins = (typeof timeToMins === 'function') ? (timeToMins(_sched.checkIn)  || 7*60)  : 7*60;
+  const _etMins = (typeof timeToMins === 'function') ? (timeToMins(_sched.checkOut) || 17*60) : 17*60;
+  let lateEarly = 'OnTime', status = 'Present';
+  if (isCI) {
+    if (tot > _stMins) { lateEarly = 'Late '+(tot-_stMins)+'min'; status = 'Late'; }
+  } else {
+    if      (tot < _etMins-10) lateEarly = 'Early '+(  _etMins-tot)+'min';
+    else if (tot > _etMins)    lateEarly = 'OT '   +(tot-_etMins  )+'min';
+  }
+  // Build Timestamp from entered date+time (not save-button click time)
+  let _tsISO;
+  try {
+    const [_yy,_mm,_dd] = date.split('-').map(Number);
+    const [_hh,_mn]     = time.split(':').map(Number);
+    _tsISO = new Date(_yy, _mm-1, _dd, _hh, _mn, 0).toISOString();
+  } catch(e) { _tsISO = new Date().toISOString(); }
 
   const row = {
     ID:s.ID, Name:s.Name, Gmail:s.Gmail||'', ProjectName:s.ProjectName||'',
-    Date:date, Time:time, Timestamp:new Date().toISOString(),
+    Date:date, Time:time, Timestamp:_tsISO,
     Latitude:'', Longitude:'', Accuracy:'Manual',
     LateEarly:lateEarly, Minutes:'0', Position:s.Position||'', Department:s.Department||''
   };
