@@ -1224,7 +1224,7 @@ tbody tr:last-child td{border-bottom:none;}
 // ========== CONFIG ==========
 const SHEET_ID = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const API_KEY = ''; // Optional: add Google API key for public sheets
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbydkieoA7yTLq2WzKjPY0JGNk10TXruyj8x1mGrGSCQJ0lqbIWM6cniTUqXls6Z95p8/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyJet2vV4KlaEmfwymWFWFL4SyTVfK7RxTIhwhqmez9Wi9oI5HATCdvy0OZ9J-8czo/exec';
 
 // Sheet names
 const SHEETS = {
@@ -2418,8 +2418,12 @@ function renderAttendance() {
       if (ft) return ft;
       if (row.Timestamp) {
         try {
-          const d = new Date(row.Timestamp);
-          if (!isNaN(d)) return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+          const ts = parseInt(row.Timestamp);
+          if (!isNaN(ts) && ts > 1000000000000) {
+            // Timestamp is Unix-ms from client — shift to UTC+7 (Cambodia)
+            const d = new Date(ts + 7 * 3600000);
+            return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
+          }
         } catch(e){}
       }
       return null;

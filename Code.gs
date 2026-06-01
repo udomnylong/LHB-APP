@@ -6,7 +6,7 @@ const SS_ID              = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const TELEGRAM_TOKEN     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN') || '';
 const TELEGRAM_CHAT      = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT')  || '549942306';
 const TELEGRAM_GROUP     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_Group') || '';
-const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbydkieoA7yTLq2WzKjPY0JGNk10TXruyj8x1mGrGSCQJ0lqbIWM6cniTUqXls6Z95p8/exec';
+const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbyJet2vV4KlaEmfwymWFWFL4SyTVfK7RxTIhwhqmez9Wi9oI5HATCdvy0OZ9J-8czo/exec';
 const FOOD_FOLDER_ID     = '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';
 const STAFF_PHOTO_FOLDER = '1BMeeqss2J_eoU-o8At7Wri-UNDzMO42DW7XzKeanz2vNgPrzJrICf5IL6OgAn6_ulWbS1B8X';
 const FOLDER_ID          = FOOD_FOLDER_ID;
@@ -265,7 +265,14 @@ function doGet(e) {
       var obj = {};
       headers.forEach(function(h, j) {
         var v = row[j];
-        if (v instanceof Date) v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        if (v instanceof Date) {
+          // Time-only cells in Sheets are stored as 1899-12-30T HH:mm:ss — format as HH:mm
+          if (v.getFullYear() === 1899 && v.getMonth() === 11 && v.getDate() === 30) {
+            v = Utilities.formatDate(v, TZ, 'HH:mm');
+          } else {
+            v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+          }
+        }
         obj[h] = (v !== undefined && v !== null) ? String(v) : '';
       });
       rows.push(obj);
@@ -716,8 +723,8 @@ function sendTelegramMsg(chatId, text) {
 function sendCheckNotification(sheet, row) {
   try {
     if(sheet!=='CheckIn'&&sheet!=='CheckOut')return;
-    // Always use server time — never trust row.Time from client
-    var serverTime = Utilities.formatDate(new Date(), TZ, 'HH:mm');
+    // Use the enforced server time already stored in row.Time; fallback to now
+    var serverTime = (row['Time'] || '').substring(0, 5) || Utilities.formatDate(new Date(), TZ, 'HH:mm');
     var emoji=sheet==='CheckIn'?'🟢':'🟡', type=sheet==='CheckIn'?'CHECK IN':'CHECK OUT';
     var msg=emoji+' '+type+' | '+serverTime+'\n\n'+(row.Name||'')+'  '+(row.ID||'')+'\n'+(row.Position||'')+' | '+(row.Department||'')+'\n'+(row.ProjectName||'');
     var target=TELEGRAM_GROUP||TELEGRAM_CHAT;
