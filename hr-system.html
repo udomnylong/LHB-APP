@@ -1224,7 +1224,7 @@ tbody tr:last-child td{border-bottom:none;}
 // ========== CONFIG ==========
 const SHEET_ID = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const API_KEY = ''; // Optional: add Google API key for public sheets
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzTp_3XUSDXDPpVL69rmRudGchDZHiqjHUiyFopqTNv6SqPz3AEsJAieoynDkBZwhLS/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCjoiBA6p0Ri1_drG2XQ52vazZkQ3clNoAXCJbGluWwWjXBpE6_vXRclIaNB65uI1w/exec';
 
 // Sheet names
 const SHEETS = {
@@ -3188,27 +3188,32 @@ async function submit(){
   }
 
   busy=true;
+  // NOTE: Date/Time here are only used for local UI display & duplicate-check.
+  // The server (enforceServerTime_ / enforceAttendanceTime_) will override
+  // all time fields with verified server time — phone clock cannot be trusted.
   const n=new Date();
   const time=pad(n.getHours())+':'+pad(n.getMinutes());
   const date=n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate());
   const dept = sf ? (sf.Department||'') : '';
   const pos  = sf ? (sf.Position||'') : '';
-  const li   = calcLate(time, QD.type, dept, pos);
+  const li   = calcLate(time, QD.type, dept, pos); // UI display only
   const row={
     ID:sf?sf.ID:sid, Name:sf?sf.Name:sid,
+    Gmail:sf?sf.Gmail||sf.Email||'':'',
     ProjectName:QD.project, Date:date, Time:time,
     Timestamp:n.toISOString(),
     Latitude:gps?String(gps.lat):'', Longitude:gps?String(gps.lng):'',
     Accuracy:gps?Math.round(gps.acc)+'m':'',
-    LateEarly:li.label, Minutes:String(li.min),
+    LateEarly:'', Minutes:'0', // server will recalculate from server time
     Position:sf?sf.Position:'', Department:sf?sf.Department:'',
   };
   document.getElementById('abtn').disabled=true;
   document.getElementById('bico').className='fas fa-spinner fa-spin';
   document.getElementById('btxt').textContent='Syncing...';
   const sn=QD.type==='checkin'?'CheckIn':'CheckOut';
-  const hdrs=['ID','Name','ProjectName','Date','Time','Timestamp','Latitude','Longitude','Accuracy','LateEarly','Minutes','Position','Department'];
+  const hdrs=['ID','Name','Gmail','ProjectName','Date','Time','Timestamp','Latitude','Longitude','Accuracy','LateEarly','Minutes','Position','Department'];
   const pl={action:'append',sheet:sn,data:row,row:hdrs.map(h=>row[h]||''),headers:hdrs};
+  // Attendance: send placeholder time fields — server enforceAttendanceTime_ will replace them
   const attPl={
     action:'upsert',sheet:'Attendance',
     keyField:'ID',keyValue:row.ID,keyDate:date,type:QD.type,
@@ -3217,26 +3222,24 @@ async function submit(){
       Date:date,
       CheckIn:QD.type==='checkin'?time:'',
       CheckOut:QD.type==='checkout'?time:'',
-      Late:QD.type==='checkin'?li.label:'',
-      Early:QD.type==='checkout'?li.label:'',
-      Status:QD.type==='checkin'?(li.type==='late'?'Late':'Present'):'Present',
+      Late:'', Early:'',   // server will recalculate
+      Status:'Present',    // server will correct if Late
     },
     row:['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date'].map(h=>({
       ID:row.ID,Name:row.Name,Position:row.Position,Department:row.Department,ProjectName:row.ProjectName,
       Date:date,CheckIn:QD.type==='checkin'?time:'',CheckOut:QD.type==='checkout'?time:'',
-      Late:QD.type==='checkin'?li.label:'',Early:QD.type==='checkout'?li.label:'',
-      Status:QD.type==='checkin'?(li.type==='late'?'Late':'Present'):'Present',
+      Late:'',Early:'',Status:'Present',
     }[h]||'')),
     headers:['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date'],
   };
   // Submit both
   postForm(pl); setTimeout(()=>postForm(attPl),800);
-  // Save history
+  // Save history (UI only — uses device time for display)
   const hk='hr_h_'+date;
   const hh=JSON.parse(localStorage.getItem(hk)||'[]');
   hh.unshift({id:row.ID,name:row.Name,time:time,type:QD.type,late:li.label,ts:Date.now()});
   localStorage.setItem(hk,JSON.stringify(hh.slice(0,20)));
-  // Show result
+  // Show result (UI display uses device time; saved data uses server time)
   showResult(row,time,li); busy=false;
 }
 

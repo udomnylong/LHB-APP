@@ -1,15 +1,138 @@
 // ============================================================
-// LHB HR SYSTEM — Google Apps Script v5.3
+// LHB HR SYSTEM — Google Apps Script v5.4
 // ============================================================
 
 const SS_ID              = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const TELEGRAM_TOKEN     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN') || '';
 const TELEGRAM_CHAT      = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT')  || '549942306';
 const TELEGRAM_GROUP     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_Group') || '';
-const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbzJUpZkxOdYLZNaiML2Z6F5koygV3iuXyMOnErhDg5V-Ug-_oEJiH2RQDUjewaKwT4b/exec';
+const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbwCjoiBA6p0Ri1_drG2XQ52vazZkQ3clNoAXCJbGluWwWjXBpE6_vXRclIaNB65uI1w/exec';
 const FOOD_FOLDER_ID     = '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';
 const STAFF_PHOTO_FOLDER = '1BMeeqss2J_eoU-o8At7Wri-UNDzMO42DW7XzKeanz2vNgPrzJrICf5IL6OgAn6_ulWbS1B8X';
 const FOLDER_ID          = FOOD_FOLDER_ID;
+
+// ============================================================
+// WORK SCHEDULE — ប្ដូរតាមពេលវេលាការងាររបស់ LHB
+// ============================================================
+const TZ                = 'Asia/Phnom_Penh';   // UTC+7
+const CHECKIN_LATE_H    = 8;   // Check In ក្រោយ 08:00 → Late
+const CHECKIN_LATE_M    = 0;
+const CHECKOUT_EARLY_H  = 17;  // Check Out មុន 17:00 → Early Leave
+const CHECKOUT_EARLY_M  = 0;
+
+// ============================================================
+// SERVER-SIDE TIME ENFORCEMENT
+// ⛔ Override client Time/Date/Timestamp with GAS server time.
+//    Prevents phone-clock manipulation fraud.
+// ============================================================
+
+// Enforce server time for Attendance sheet CheckIn/CheckOut fields.
+// Mutates p.data and p.keyDate so the subsequent upsert logic uses server date.
+function enforceAttendanceTime_(p) {
+  var now    = new Date();
+  var sDate  = Utilities.formatDate(now, TZ, 'yyyy-MM-dd');
+  var sTime  = Utilities.formatDate(now, TZ, 'HH:mm');
+  var sH     = parseInt(sTime.split(':')[0]);
+  var sMn    = parseInt(sTime.split(':')[1]);
+  var total  = sH * 60 + sMn;
+
+  var row    = p.data || {};
+  row.Date   = sDate;
+  p.keyDate  = sDate; // fix search key so upsert finds correct server-date row
+
+  var clientCheckIn  = String(row.CheckIn  || '');
+  var clientCheckOut = String(row.CheckOut || '');
+  var clientLate     = String(row.Late     || '');
+  var clientEarly    = String(row.Early    || '');
+  Logger.log('[ATT-AUDIT] type:' + p.type
+    + ' | ID:' + (row.ID||'?')
+    + ' | clientCheckIn:'  + clientCheckIn
+    + ' | clientCheckOut:' + clientCheckOut
+    + ' | clientLate:'     + clientLate
+    + ' | clientEarly:'    + clientEarly
+    + ' | serverTime:'     + sTime);
+
+  if (p.type === 'checkin') {
+    row.CheckIn = sTime;
+    var cutoff = CHECKIN_LATE_H * 60 + CHECKIN_LATE_M;
+    if (total > cutoff) {
+      var lateMin = total - cutoff;
+      row.Late   = 'Late ' + lateMin + ' min';
+      row.Status = 'Late';
+    } else {
+      row.Late   = '';
+      row.Status = 'Present';
+    }
+  } else if (p.type === 'checkout') {
+    row.CheckOut = sTime;
+    var endCutoff = CHECKOUT_EARLY_H * 60 + CHECKOUT_EARLY_M;
+    if (total < endCutoff) {
+      row.Early = 'Early ' + (endCutoff - total) + ' min';
+    } else {
+      row.Early = '';
+    }
+  }
+
+  p.data = row;
+  return p;
+}
+function enforceServerTime_(row, sheet) {
+  var now      = new Date();
+  var sTime    = Utilities.formatDate(now, TZ, 'HH:mm:ss');
+  var sDate    = Utilities.formatDate(now, TZ, 'yyyy-MM-dd');
+  var sTs      = String(now.getTime());
+
+  // ── Audit log: compare client time vs server time ──
+  var clientTime = String(row['Time'] || '?');
+  var clientTs   = parseInt(row['Timestamp'] || 0);
+  var driftSec   = clientTs > 0 ? Math.round((now.getTime() - clientTs) / 1000) : 9999;
+  Logger.log('[TIME-AUDIT] ' + sheet
+    + ' | ID:'   + (row['ID']   || '?')
+    + ' | Name:' + (row['Name'] || '?')
+    + ' | clientTime:'  + clientTime
+    + ' | serverTime:'  + sTime
+    + ' | driftSec:'    + driftSec);
+
+  if (Math.abs(driftSec) > 300) {   // > 5 minutes difference
+    Logger.log('[⚠️ SUSPICIOUS] Clock drift > 5min for ' + (row['ID']||'?')
+               + ' | drift=' + driftSec + 's'
+               + ' | clientTime=' + clientTime
+               + ' | serverTime=' + sTime);
+  }
+
+  // ── Replace client values with verified server values ──
+  row['Time']      = sTime;
+  row['Date']      = sDate;
+  row['Timestamp'] = sTs;
+
+  // ── Recalculate LateEarly / Minutes from server time ──
+  var hParts   = sTime.split(':');
+  var sH       = parseInt(hParts[0]);
+  var sMin     = parseInt(hParts[1]);
+  var nowTotal = sH * 60 + sMin;
+
+  if (sheet === 'CheckIn') {
+    var cutoff = CHECKIN_LATE_H * 60 + CHECKIN_LATE_M;
+    if (nowTotal > cutoff) {
+      row['LateEarly'] = 'Late';
+      row['Minutes']   = String(nowTotal - cutoff);
+    } else {
+      row['LateEarly'] = '';
+      row['Minutes']   = '0';
+    }
+  } else if (sheet === 'CheckOut') {
+    var endCutoff = CHECKOUT_EARLY_H * 60 + CHECKOUT_EARLY_M;
+    if (nowTotal < endCutoff) {
+      row['LateEarly'] = 'Early';
+      row['Minutes']   = String(endCutoff - nowTotal);
+    } else {
+      row['LateEarly'] = '';
+      row['Minutes']   = '0';
+    }
+  }
+
+  return row;
+}
 
 // ============================================================
 // doGet — Read Sheet / Photo
@@ -241,6 +364,10 @@ function doPost(e) {
       if (!ws) return respond({ status:'error', msg:'Sheet not found: '+p.sheet });
       var headers=ws.getRange(1,1,1,ws.getLastColumn()).getValues()[0].map(function(h){return String(h).trim();});
       var row=p.data||{};
+      // ⛔ SECURITY: replace client time with verified server time
+      if (p.sheet === 'CheckIn' || p.sheet === 'CheckOut') {
+        row = enforceServerTime_(row, p.sheet);
+      }
       ws.appendRow(headers.map(function(h){return row[h]!==undefined?row[h]:'';}));
       sendCheckNotification(p.sheet, row);
       return respond({ status:'ok' });
@@ -250,17 +377,31 @@ function doPost(e) {
     if (p.action === 'upsert') {
       var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName(p.sheet);
       if (!ws) return respond({ status:'error', msg:'Sheet not found: '+p.sheet });
+      // ⛔ SECURITY: enforce server time for Attendance CheckIn/CheckOut
+      if (p.sheet === 'Attendance' && (p.type === 'checkin' || p.type === 'checkout')) {
+        p = enforceAttendanceTime_(p);
+      }
       var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
       var idIdx=headers.indexOf('ID'), dateIdx=headers.indexOf('Date');
       for (var i=1;i<data.length;i++){
         if (String(data[i][idIdx]).trim()===String(p.keyValue).trim()&&normDate(data[i][dateIdx])===String(p.keyDate).trim()){
           var row=p.data||{};
+          // ⛔ SECURITY: replace client time with verified server time
+          if (p.sheet === 'CheckIn' || p.sheet === 'CheckOut') {
+            row = enforceServerTime_(row, p.sheet);
+          }
           headers.forEach(function(h,j){if(row[h]!==undefined&&row[h]!=='')ws.getRange(i+1,j+1).setValue(row[h]);});
+          sendCheckNotification(p.sheet, row);
           return respond({ status:'ok', action:'updated' });
         }
       }
       var row=p.data||{};
+      // ⛔ SECURITY: replace client time with verified server time
+      if (p.sheet === 'CheckIn' || p.sheet === 'CheckOut') {
+        row = enforceServerTime_(row, p.sheet);
+      }
       ws.appendRow(headers.map(function(h){return row[h]!==undefined?row[h]:'';}));
+      sendCheckNotification(p.sheet, row);
       return respond({ status:'ok', action:'appended' });
     }
 
@@ -353,29 +494,62 @@ function doPost(e) {
       if (!uphotoUrl)      return respond({ status:'error', msg:'updateStaffPhoto: photoUrl required' });
       if (!ugmail && !uid) return respond({ status:'error', msg:'updateStaffPhoto: gmail or id required' });
       try {
-        var uss    = SpreadsheetApp.openById(SS_ID);
-        var uws    = uss.getSheetByName('StaffInfo');
-        if (!uws)  return respond({ status:'error', msg:'StaffInfo sheet not found' });
-        var udata  = uws.getDataRange().getValues();
-        var uhdrs  = udata[0].map(function(h){ return String(h).trim(); });
-        var ugmIdx = uhdrs.indexOf('Gmail');
-        var uidIdx = uhdrs.indexOf('ID');
-        var uphIdx = uhdrs.indexOf('Photo');
-        if (uphIdx < 0) return respond({ status:'error', msg:'Photo column not found in StaffInfo' });
+        var uss        = SpreadsheetApp.openById(SS_ID);
+        var uws        = uss.getSheetByName('StaffInfo');
+        if (!uws)      return respond({ status:'error', msg:'StaffInfo sheet not found' });
+        var udata      = uws.getDataRange().getValues();
+        var uhdrs      = udata[0].map(function(h){ return String(h).trim(); });
+        var uhdrsLow   = uhdrs.map(function(h){ return h.toLowerCase(); });
+
+        // ── Find columns (case-insensitive + name variations) ──
+        function findCol(names) {
+          for (var ni = 0; ni < names.length; ni++) {
+            var idx = uhdrs.indexOf(names[ni]);
+            if (idx >= 0) return idx;
+          }
+          for (var ni2 = 0; ni2 < names.length; ni2++) {
+            var idx2 = uhdrsLow.indexOf(names[ni2].toLowerCase());
+            if (idx2 >= 0) return idx2;
+          }
+          return -1;
+        }
+
+        var ugmIdx = findCol(['Gmail','Email','email','gmail','G-Mail']);
+        var uidIdx = findCol(['ID','id','StaffID','staffid']);
+        var uphIdx = findCol(['Photo','photo','PhotoUrl','photoUrl']);
+
+        Logger.log('updateStaffPhoto — gmail:'+ugmail+' id:'+uid+' gmailCol:'+ugmIdx+' idCol:'+uidIdx+' photoCol:'+uphIdx);
+        Logger.log('Headers: ' + uhdrs.join(' | '));
+
+        if (uphIdx < 0) return respond({ status:'error', msg:'Photo column not found. Headers: ' + uhdrs.join(', ') });
+
         var uupdated = false;
         for (var ui = 1; ui < udata.length; ui++) {
-          var rGmail = String(udata[ui][ugmIdx] || '').toLowerCase().trim();
-          var rId    = String(udata[ui][uidIdx]  || '').trim();
-          if ((ugmail && rGmail === ugmail) || (uid && rId === uid)) {
+          var rGmail = ugmIdx >= 0 ? String(udata[ui][ugmIdx] || '').toLowerCase().trim() : '';
+          var rId    = uidIdx >= 0 ? String(udata[ui][uidIdx]  || '').trim() : '';
+          var matchG = ugmail && rGmail && (rGmail === ugmail);
+          var matchI = uid    && rId    && (rId    === uid);
+          if (matchG || matchI) {
+            Logger.log('Match row '+(ui+1)+': rGmail='+rGmail+' rId='+rId);
             uws.getRange(ui + 1, uphIdx + 1).setValue(uphotoUrl);
             uupdated = true;
             break;
           }
         }
         SpreadsheetApp.flush();
-        if (!uupdated) return respond({ status:'error', msg:'Staff not found: ' + (ugmail || uid) });
-        Logger.log('updateStaffPhoto OK: ' + (ugmail || uid) + ' → ' + uphotoUrl);
-        return respond({ status:'ok', msg:'Photo link updated in StaffInfo' });
+
+        if (!uupdated) {
+          // Log first 3 rows to help debug
+          var sample = [];
+          for (var si = 1; si < Math.min(4, udata.length); si++) {
+            sample.push('row'+si+': gmail='+(ugmIdx>=0?udata[si][ugmIdx]:'-')+' id='+(uidIdx>=0?udata[si][uidIdx]:'-'));
+          }
+          Logger.log('Not found. Sample: ' + sample.join(' | '));
+          return respond({ status:'error', msg:'Staff not found — sent: gmail='+ugmail+' id='+uid });
+        }
+
+        Logger.log('updateStaffPhoto OK: '+(ugmail||uid)+' → '+uphotoUrl);
+        return respond({ status:'ok', msg:'Photo updated' });
       } catch(ue) {
         Logger.log('updateStaffPhoto error: ' + ue.message);
         return respond({ status:'error', msg:ue.message });
