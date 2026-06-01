@@ -1224,7 +1224,7 @@ tbody tr:last-child td{border-bottom:none;}
 // ========== CONFIG ==========
 const SHEET_ID = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const API_KEY = ''; // Optional: add Google API key for public sheets
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCjoiBA6p0Ri1_drG2XQ52vazZkQ3clNoAXCJbGluWwWjXBpE6_vXRclIaNB65uI1w/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbydkieoA7yTLq2WzKjPY0JGNk10TXruyj8x1mGrGSCQJ0lqbIWM6cniTUqXls6Z95p8/exec';
 
 // Sheet names
 const SHEETS = {
@@ -3244,16 +3244,20 @@ async function submit(){
 }
 
 function postForm(payload){
-  try{
-    let fr=document.getElementById('_sf_');
-    if(!fr){fr=document.createElement('iframe');fr.name='_sf_';fr.id='_sf_';fr.style.display='none';document.body.appendChild(fr);}
-    const f=document.createElement('form');
-    f.method='POST';f.action=SU;f.target='_sf_';f.style.display='none';
-    const i=document.createElement('input');i.type='hidden';i.name='payload';i.value=JSON.stringify(payload);
-    f.appendChild(i);document.body.appendChild(f);f.submit();document.body.removeChild(f);
-  }catch(e){
-    fetch(SU,{method:'POST',mode:'no-cors',body:JSON.stringify(payload),headers:{'Content-Type':'text/plain'}}).catch(()=>{});
-  }
+  // fetch as primary — sends raw JSON body so GAS enforceServerTime_ can run.
+  // Form submit sent URL-encoded body which GAS could not JSON-parse, bypassing server time enforcement.
+  fetch(SU,{method:'POST',mode:'no-cors',body:JSON.stringify(payload),headers:{'Content-Type':'text/plain'}})
+    .catch(function(){
+      // fallback: form submit (fire-and-forget to hidden iframe)
+      try{
+        var fr=document.getElementById('_sf_');
+        if(!fr){fr=document.createElement('iframe');fr.name='_sf_';fr.id='_sf_';fr.style.display='none';document.body.appendChild(fr);}
+        var f=document.createElement('form');
+        f.method='POST';f.action=SU;f.target='_sf_';f.style.display='none';
+        var i=document.createElement('input');i.type='hidden';i.name='payload';i.value=JSON.stringify(payload);
+        f.appendChild(i);document.body.appendChild(f);f.submit();document.body.removeChild(f);
+      }catch(e2){}
+    });
 }
 
 function showResult(row,time,li){

@@ -6,7 +6,7 @@ const SS_ID              = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const TELEGRAM_TOKEN     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN') || '';
 const TELEGRAM_CHAT      = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT')  || '549942306';
 const TELEGRAM_GROUP     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_Group') || '';
-const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbwCjoiBA6p0Ri1_drG2XQ52vazZkQ3clNoAXCJbGluWwWjXBpE6_vXRclIaNB65uI1w/exec';
+const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbydkieoA7yTLq2WzKjPY0JGNk10TXruyj8x1mGrGSCQJ0lqbIWM6cniTUqXls6Z95p8/exec';
 const FOOD_FOLDER_ID     = '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';
 const STAFF_PHOTO_FOLDER = '1BMeeqss2J_eoU-o8At7Wri-UNDzMO42DW7XzKeanz2vNgPrzJrICf5IL6OgAn6_ulWbS1B8X';
 const FOLDER_ID          = FOOD_FOLDER_ID;
@@ -716,8 +716,10 @@ function sendTelegramMsg(chatId, text) {
 function sendCheckNotification(sheet, row) {
   try {
     if(sheet!=='CheckIn'&&sheet!=='CheckOut')return;
+    // Always use server time — never trust row.Time from client
+    var serverTime = Utilities.formatDate(new Date(), TZ, 'HH:mm');
     var emoji=sheet==='CheckIn'?'🟢':'🟡', type=sheet==='CheckIn'?'CHECK IN':'CHECK OUT';
-    var msg=emoji+' '+type+' | '+(row.Time||'')+'\n\n'+(row.Name||'')+'  '+(row.ID||'')+'\n'+(row.Position||'')+' | '+(row.Department||'')+'\n'+(row.ProjectName||'');
+    var msg=emoji+' '+type+' | '+serverTime+'\n\n'+(row.Name||'')+'  '+(row.ID||'')+'\n'+(row.Position||'')+' | '+(row.Department||'')+'\n'+(row.ProjectName||'');
     var target=TELEGRAM_GROUP||TELEGRAM_CHAT;
     if(target)sendTelegramMsg(target,msg);
   }catch(e){Logger.log('Notify: '+e.message);}
