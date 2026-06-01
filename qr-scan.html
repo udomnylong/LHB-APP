@@ -532,21 +532,34 @@ async function doSubmit(){
   const btn=document.getElementById('actBtn');
   btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner spin"></i> កំពុង Sync...';
 
+  // NOTE: n/time/date used for UI display only — server overrides all time fields
   const n=new Date(),time=pad(n.getHours())+':'+pad(n.getMinutes());
   const date=n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate());
   const dept=matched.Department||matched.Position||'';
-  const li=calcLate(time,QD.type,dept);
+  const li=calcLate(time,QD.type,dept); // UI display only
   const sn=QD.type==='checkin'?'CheckIn':'CheckOut';
   const row={
     ID:matched.ID||'',Name:matched.Name||'',Gmail:user?user.email:'',
     ProjectName:QD.project||'',Date:date,Time:time,Timestamp:n.toISOString(),
     Latitude:gps.lat,Longitude:gps.lng,Accuracy:gps.acc,
-    LateEarly:li.label,Minutes:li.min,
+    LateEarly:'',Minutes:'0', // server (enforceServerTime_) will recalculate
     Position:matched.Position||'',Department:dept,
   };
   try {
     await fetch(SU,{method:'POST',mode:'cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'append',sheet:sn,data:row})});
-    fetch(SU,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'upsert',sheet:'Attendance',data:{ID:row.ID,Name:row.Name,Position:row.Position,Department:dept,ProjectName:row.ProjectName,Date:date,CheckIn:QD.type==='checkin'?time:'',CheckOut:QD.type==='checkout'?time:'',Late:QD.type==='checkin'?li.label:'',Status:'Present'},keyValue:row.ID,keyDate:date})}).catch(()=>{});
+    // type field required so server enforceAttendanceTime_ recalculates CheckIn/Out, Late, Early, Status
+    fetch(SU,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({
+      action:'upsert',sheet:'Attendance',
+      type:QD.type,
+      keyValue:row.ID,keyDate:date,
+      data:{
+        ID:row.ID,Name:row.Name,Position:row.Position,Department:dept,
+        ProjectName:row.ProjectName,Date:date,
+        CheckIn:QD.type==='checkin'?time:'',
+        CheckOut:QD.type==='checkout'?time:'',
+        Late:'',Early:'',Status:'Present', // server will recalculate from server time
+      }
+    })}).catch(()=>{});
     const ci=QD.type==='checkin';
     const hKey='hr_h_'+date;
     const hist=JSON.parse(localStorage.getItem(hKey)||'[]');
