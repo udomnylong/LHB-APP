@@ -2435,11 +2435,36 @@ function renderAttendance() {
     // Merge: prefer QR scan data over manual
     const checkIn  = extractTime(ciRow) || (attRow ? attRow.CheckIn||'-' : '-');
     const checkOut = extractTime(coRow) || (attRow ? attRow.CheckOut||'-' : '-');
-    const late     = (ciRow && ciRow.LateEarly) ? ciRow.LateEarly
-                   : (attRow ? attRow.Late||'-' : '-');
-    const early    = (coRow && coRow.LateEarly && coRow.LateEarly !== 'OnTime') ? coRow.LateEarly
-                   : (coRow && coRow.LateEarly === 'OnTime') ? 'OnTime'
-                   : (attRow ? attRow.Early||'-' : '-');
+
+    // LateEarly: QR scan saves LateEarly:'' (server recalculates on its side).
+    // So recalculate locally from actual check-in time vs dept schedule when stored value is empty.
+    let late = (ciRow && ciRow.LateEarly) ? ciRow.LateEarly
+             : (attRow && attRow.Late && attRow.Late !== '-') ? attRow.Late
+             : null;
+    if (!late && ciRow && checkIn && checkIn !== '-') {
+      const _sc   = getDeptSchedule(s.Department||'');
+      const _stM  = timeToMins(_sc.checkIn) || 7*60;
+      const [_ch,_cm] = checkIn.split(':').map(Number);
+      const _ciM  = _ch*60+_cm;
+      late = _ciM > _stM ? 'Late '+(_ciM-_stM)+'min' : 'OnTime';
+    }
+    if (!late) late = '-';
+
+    // Early/OT: same approach for checkout
+    let early = (coRow && coRow.LateEarly && coRow.LateEarly !== 'OnTime') ? coRow.LateEarly
+              : (coRow && coRow.LateEarly === 'OnTime') ? 'OnTime'
+              : (attRow && attRow.Early && attRow.Early !== '-') ? attRow.Early
+              : null;
+    if (!early && coRow && checkOut && checkOut !== '-') {
+      const _sc2  = getDeptSchedule(s.Department||'');
+      const _etM  = timeToMins(_sc2.checkOut) || 17*60;
+      const [_oh,_om] = checkOut.split(':').map(Number);
+      const _coM  = _oh*60+_om;
+      if      (_coM < _etM-10) early = 'Early '+(_etM-_coM)+'min';
+      else if (_coM > _etM)    early = 'OT '+(_coM-_etM)+'min';
+      else                     early = 'OnTime';
+    }
+    if (!early) early = '-';
 
     // Status logic
     let status = 'Absent';
@@ -2449,7 +2474,10 @@ function renderAttendance() {
     }
     if (attRow && attRow.Status === 'Leave') status = 'Leave';
     if (ciRow) status = (late && late !== '-' && late.includes('Late')) ? 'Late' : 'Present';
-    if (coRow && checkOut !== '-') status = 'CheckedOut'; // Has checked out
+    if (coRow && checkOut !== '-') {
+      // Preserve Late status even after checkout
+      status = (late && late !== '-' && late.includes('Late')) ? 'Late' : 'CheckedOut';
+    }
 
     return {
       ID: s.ID, Name: s.Name, Position: s.Position,
