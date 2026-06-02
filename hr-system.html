@@ -4703,6 +4703,7 @@ function prefillManualAtt() {
   document.getElementById('mci_staff').onchange = () => {
     const s = appData.staff.find(x=>x.ID===document.getElementById('mci_staff').value);
     if (s && s.ProjectName) document.getElementById('mci_project').value = s.ProjectName;
+    updateLateDisplay();
   };
   // Time change → show late/early
   document.getElementById('mci_time').addEventListener('input', updateLateDisplay);
@@ -4714,15 +4715,18 @@ function updateLateDisplay() {
   if (!time) return;
   const disp = document.getElementById('mci_late_display');
   const [h,m] = time.split(':').map(Number), tot = h*60+m;
+  const staffId = document.getElementById('mci_staff').value;
+  const staffObj = appData.staff.find(x=>x.ID===staffId);
+  const sched = getDeptSchedule(staffObj ? (staffObj.Department||'') : '');
+  const startMin = timeToMins(sched.checkIn)  || 7*60+15;
+  const endMin   = timeToMins(sched.checkOut) || 17*60;
   let msg = '', color = '';
   if (manualAttType === 'checkin') {
-    const startMin = 7*60+15;
-    if (tot > startMin) { const diff=tot-startMin; msg='⚠️ Late '+diff+' min ('+time+' > 07:15)'; color='#fef3c7'; }
+    if (tot > startMin) { const diff=tot-startMin; msg='⚠️ Late '+diff+' min ('+time+' > '+sched.checkIn+')'; color='#fef3c7'; }
     else { msg='✅ OnTime ('+time+')'; color='#d1fae5'; }
   } else {
-    const endMin = 17*60;
-    if (tot < endMin-10) { const diff=endMin-tot; msg='🔶 Early '+diff+' min ('+time+' < 16:50)'; color='#fee2e2'; }
-    else if (tot > endMin) { const diff=tot-endMin; msg='💪 OT '+diff+' min ('+time+' > 17:00)'; color='#ede9fe'; }
+    if (tot < endMin-10) { const diff=endMin-tot; msg='🔶 Early '+diff+' min ('+time+' < '+sched.checkOut+')'; color='#fee2e2'; }
+    else if (tot > endMin) { const diff=tot-endMin; msg='💪 OT '+diff+' min ('+time+' > '+sched.checkOut+')'; color='#ede9fe'; }
     else { msg='✅ OnTime ('+time+')'; color='#d1fae5'; }
   }
   disp.style.display='block'; disp.style.background=color; disp.textContent=msg;
@@ -4738,16 +4742,17 @@ async function saveManualAtt() {
   const s = appData.staff.find(x=>x.ID===staffId);
   if (!s) return;
 
-  // Calculate late/early
+  // Calculate late/early using dept-specific schedule
   const [h,m] = time.split(':').map(Number), tot=h*60+m;
+  const _sched = getDeptSchedule(s.Department||'');
+  const _stMin = timeToMins(_sched.checkIn)  || 7*60+15;
+  const _etMin = timeToMins(_sched.checkOut) || 17*60;
   let lateEarly = 'OnTime', status = 'Present';
   if (manualAttType === 'checkin') {
-    const st=7*60+15;
-    if(tot>st){lateEarly='Late '+(tot-st)+'min'; status='Late';}
+    if(tot>_stMin){lateEarly='Late '+(tot-_stMin)+'min'; status='Late';}
   } else {
-    const et=17*60;
-    if(tot<et-10) lateEarly='Early '+(et-tot)+'min';
-    else if(tot>et) lateEarly='OT '+(tot-et)+'min';
+    if(tot<_etMin-10) lateEarly='Early '+(_etMin-tot)+'min';
+    else if(tot>_etMin) lateEarly='OT '+(tot-_etMin)+'min';
   }
 
   const row = {
@@ -4815,15 +4820,16 @@ async function checkInAll() {
   const time = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   const date = now.toISOString().split('T')[0];
   const tot = now.getHours()*60+now.getMinutes();
-  const st = 7*60+15;
-  const lateEarly = tot>st ? 'Late '+(tot-st)+'min' : 'OnTime';
-  const status = tot>st ? 'Late' : 'Present';
   showLoading(true);
   if (!appData.checkin) appData.checkin=[];
   // Remove all today's checkin first (dedup)
   appData.checkin = appData.checkin.filter(c=>c.Date!==date);
   const batchRows = [];
   for (const s of appData.staff) {
+    const _sc = getDeptSchedule(s.Department||'');
+    const _st = timeToMins(_sc.checkIn) || 7*60+15;
+    const lateEarly = tot>_st ? 'Late '+(tot-_st)+'min' : 'OnTime';
+    const status = tot>_st ? 'Late' : 'Present';
     const row = {
       ID:s.ID, Name:s.Name, Gmail:s.Gmail||'', ProjectName:s.ProjectName||'',
       Date:date, Time:time, Timestamp:now.toISOString(),
@@ -4848,12 +4854,13 @@ async function checkOutAll() {
   const time = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   const date = now.toISOString().split('T')[0];
   const tot = now.getHours()*60+now.getMinutes();
-  const et = 17*60;
-  const lateEarly = tot<et-10 ? 'Early '+(et-tot)+'min' : tot>et ? 'OT '+(tot-et)+'min' : 'OnTime';
   showLoading(true);
   if (!appData.checkout) appData.checkout=[];
   appData.checkout = appData.checkout.filter(c=>c.Date!==date);
   for (const s of appData.staff) {
+    const _sc = getDeptSchedule(s.Department||'');
+    const _et = timeToMins(_sc.checkOut) || 17*60;
+    const lateEarly = tot<_et-10 ? 'Early '+(_et-tot)+'min' : tot>_et ? 'OT '+(tot-_et)+'min' : 'OnTime';
     const row = {
       ID:s.ID, Name:s.Name, Gmail:s.Gmail||'', ProjectName:s.ProjectName||'',
       Date:date, Time:time, Timestamp:now.toISOString(),
