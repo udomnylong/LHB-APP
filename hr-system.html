@@ -2377,21 +2377,21 @@ function renderAttendance() {
     const sGmail = String(s.Gmail||'').toLowerCase().trim();
 
     // From CheckIn sheet — deduplicated: pick earliest/first match
-    const ciRows = (appData.checkin||[]).filter(c => {
-      const cid    = String(c.ID||'').trim().toUpperCase();
-      const cgmail = String(c.Gmail||'').toLowerCase().trim();
-      const cdate  = String(c.Date||c.Timestamp||'').split('T')[0];
-      return (!selDate || cdate === selDate) && (cid === sid || (sGmail && cgmail === sGmail));
-    });
+    // Priority: ID match first; Gmail only as fallback when no ID match found.
+    // This prevents false positives when multiple staff share the same company Gmail.
+    const _ciDateOk = c => { const d=String(c.Date||c.Timestamp||'').split('T')[0]; return !selDate||d===selDate; };
+    const ciByID  = (appData.checkin||[]).filter(c => _ciDateOk(c) && String(c.ID||'').trim().toUpperCase() === sid.toUpperCase());
+    const ciRows  = ciByID.length > 0 ? ciByID
+                  : sGmail ? (appData.checkin||[]).filter(c => _ciDateOk(c) && String(c.Gmail||'').toLowerCase().trim() === sGmail)
+                  : [];
     const ciRow = ciRows.length > 0 ? ciRows[0] : null; // earliest only
 
     // From CheckOut sheet — deduplicated: pick latest/last match
-    const coRows = (appData.checkout||[]).filter(c => {
-      const cid    = String(c.ID||'').trim().toUpperCase();
-      const cgmail = String(c.Gmail||'').toLowerCase().trim();
-      const cdate  = String(c.Date||c.Timestamp||'').split('T')[0];
-      return (!selDate || cdate === selDate) && (cid === sid || (sGmail && cgmail === sGmail));
-    });
+    const _coDok = c => { const d=String(c.Date||c.Timestamp||'').split('T')[0]; return !selDate||d===selDate; };
+    const coByID  = (appData.checkout||[]).filter(c => _coDok(c) && String(c.ID||'').trim().toUpperCase() === sid.toUpperCase());
+    const coRows  = coByID.length > 0 ? coByID
+                  : sGmail ? (appData.checkout||[]).filter(c => _coDok(c) && String(c.Gmail||'').toLowerCase().trim() === sGmail)
+                  : [];
     const coRow = coRows.length > 0 ? coRows[coRows.length-1] : null; // latest only
 
     // Helper: extract & normalize HH:MM (24h) from Time field or Timestamp
@@ -2438,9 +2438,18 @@ function renderAttendance() {
 
     // LateEarly: QR scan saves LateEarly:'' (server recalculates on its side).
     // So recalculate locally from actual check-in time vs dept schedule when stored value is empty.
-    let late = (ciRow && ciRow.LateEarly) ? ciRow.LateEarly
-             : (attRow && attRow.Late && attRow.Late !== '-') ? attRow.Late
-             : null;
+    // Helper: combine LateEarly + Minutes from QR scan row (server stores them separately)
+    const _fmtLE = (row) => {
+      if (!row) return null;
+      const le = String(row.LateEarly||'').trim();
+      if (!le) return null;
+      const mins = parseInt(row.Minutes||'0');
+      if ((le === 'Late' || le === 'Early') && mins > 0) return le + ' ' + mins + 'min';
+      return le;
+    };
+
+    let late = _fmtLE(ciRow)
+             || (attRow && attRow.Late && attRow.Late !== '-' ? attRow.Late : null);
     if (!late && ciRow && checkIn && checkIn !== '-') {
       const _sc   = getDeptSchedule(s.Department||'');
       const _stM  = timeToMins(_sc.checkIn) || 7*60;
@@ -2450,8 +2459,9 @@ function renderAttendance() {
     }
     if (!late) late = '-';
 
-    // Early/OT: same approach for checkout
-    let early = (coRow && coRow.LateEarly && coRow.LateEarly !== 'OnTime') ? coRow.LateEarly
+    // Early/OT: combine LateEarly+Minutes from checkout row
+    const _coLE = _fmtLE(coRow);
+    let early = (_coLE && _coLE !== 'OnTime') ? _coLE
               : (coRow && coRow.LateEarly === 'OnTime') ? 'OnTime'
               : (attRow && attRow.Early && attRow.Early !== '-') ? attRow.Early
               : null;
