@@ -3179,6 +3179,20 @@ function showVerifyError(msg){
   setTimeout(()=>{el.style.display='none';},4000);
 }
 
+function getTimeRole(dept, position){
+  // Use getDeptSchedule from main app if available (same localStorage settings)
+  if(typeof getDeptSchedule==='function'&&typeof timeToMins==='function'){
+    const sc=getDeptSchedule(dept||'');
+    return{checkIn:timeToMins(sc.checkIn)||7*60,checkOut:timeToMins(sc.checkOut)||17*60,earlyGrace:10};
+  }
+  // Fallback: match the 3-group default schedule
+  const d=(dept||'').toLowerCase();
+  if(['production','site aluminum','site construction','operations','stock','surveyor','mep']
+      .some(x=>d.includes(x))) return{checkIn:7*60,checkOut:17*60,earlyGrace:10};
+  if(["l'cafe",'security','cleaner & cook','cleaner','cook']
+      .some(x=>d.includes(x))) return{checkIn:6*60,checkOut:18*60,earlyGrace:10};
+  return{checkIn:8*60,checkOut:17*60,earlyGrace:10};
+}
 function calcLate(t, type, dept, position){
   const role = getTimeRole(dept, position);
   const [h,m] = t.split(':').map(Number), tot = h*60+m;
