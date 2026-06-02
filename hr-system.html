@@ -2742,13 +2742,21 @@ function showAttHistory(el) {
     return s.slice(0,10);
   };
 
+  // Helper: combine server's LateEarly + Minutes fields into display string
+  const _histFmtLE = (r) => {
+    const le = String(r.LateEarly||'').trim();
+    if (!le) return '';
+    const mins = parseInt(r.Minutes||'0');
+    return (le === 'Late' || le === 'Early') && mins > 0 ? le + ' ' + mins + 'min' : le;
+  };
+
   ciRecs.forEach(r => {
     const d = normD(r.Date||r.Timestamp);
     if(!d) return;
     if(!dateMap[d]) dateMap[d] = {date:d};
     const t = extractTimeFromRow(r);
     if(!dateMap[d].ci || (t !== '-' && t < dateMap[d].ci)) dateMap[d].ci = t;
-    dateMap[d].late = r.LateEarly||'';
+    dateMap[d].late = _histFmtLE(r);
     if(!dateMap[d].project && r.ProjectName) dateMap[d].project = r.ProjectName;
   });
   coRecs.forEach(r => {
@@ -2757,7 +2765,7 @@ function showAttHistory(el) {
     if(!dateMap[d]) dateMap[d] = {date:d};
     const t = extractTimeFromRow(r);
     if(!dateMap[d].co || (t !== '-' && t > dateMap[d].co)) dateMap[d].co = t;
-    dateMap[d].early = r.LateEarly||'';
+    dateMap[d].early = _histFmtLE(r);
     if(!dateMap[d].project && r.ProjectName) dateMap[d].project = r.ProjectName;
   });
   attRecs.forEach(r => {
