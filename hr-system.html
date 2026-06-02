@@ -483,8 +483,9 @@ tbody tr:last-child td{border-bottom:none;}
                 <input type="time" id="attCfgCO_1" style="width:100%;padding:7px 8px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:14px;font-weight:700;color:var(--primary);">
               </div>
               <div>
-                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-building" style="margin-right:3px;"></i>ផ្នែក (១ ក្នុង ១ បន្ទាត់)</label>
-                <textarea id="attCfgDepts_1" rows="4" style="width:100%;padding:6px 8px;border:1.5px solid #bfdbfe;border-radius:7px;font-family:var(--font-km);font-size:12px;resize:vertical;"></textarea>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-building" style="margin-right:3px;"></i>ផ្នែក</label>
+                <div id="attCfgDeptsBox_1" onclick="attDeptToggleDropdown(1,event)" style="min-height:52px;border:1.5px solid #bfdbfe;border-radius:7px;padding:5px 8px;display:flex;flex-wrap:wrap;gap:4px;cursor:pointer;background:#fff;align-items:flex-start;align-content:flex-start;user-select:none;"></div>
+                <div id="attCfgDeptsDD_1" style="display:none;position:fixed;z-index:9999;background:#fff;border:1.5px solid #bfdbfe;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);overflow:hidden;"></div>
               </div>
             </div>
           </div>
@@ -504,8 +505,9 @@ tbody tr:last-child td{border-bottom:none;}
                 <input type="time" id="attCfgCO_2" style="width:100%;padding:7px 8px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:14px;font-weight:700;color:var(--primary);">
               </div>
               <div>
-                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-building" style="margin-right:3px;"></i>ផ្នែក (១ ក្នុង ១ បន្ទាត់)</label>
-                <textarea id="attCfgDepts_2" rows="5" style="width:100%;padding:6px 8px;border:1.5px solid #bbf7d0;border-radius:7px;font-family:var(--font-km);font-size:12px;resize:vertical;"></textarea>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-building" style="margin-right:3px;"></i>ផ្នែក</label>
+                <div id="attCfgDeptsBox_2" onclick="attDeptToggleDropdown(2,event)" style="min-height:52px;border:1.5px solid #bbf7d0;border-radius:7px;padding:5px 8px;display:flex;flex-wrap:wrap;gap:4px;cursor:pointer;background:#fff;align-items:flex-start;align-content:flex-start;user-select:none;"></div>
+                <div id="attCfgDeptsDD_2" style="display:none;position:fixed;z-index:9999;background:#fff;border:1.5px solid #bbf7d0;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);overflow:hidden;"></div>
               </div>
             </div>
           </div>
@@ -525,8 +527,9 @@ tbody tr:last-child td{border-bottom:none;}
                 <input type="time" id="attCfgCO_3" style="width:100%;padding:7px 8px;border:1.5px solid #fed7aa;border-radius:7px;font-size:14px;font-weight:700;color:var(--primary);">
               </div>
               <div>
-                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-building" style="margin-right:3px;"></i>ផ្នែក (១ ក្នុង ១ បន្ទាត់)</label>
-                <textarea id="attCfgDepts_3" rows="3" style="width:100%;padding:6px 8px;border:1.5px solid #fed7aa;border-radius:7px;font-family:var(--font-km);font-size:12px;resize:vertical;"></textarea>
+                <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:3px;"><i class="fas fa-building" style="margin-right:3px;"></i>ផ្នែក</label>
+                <div id="attCfgDeptsBox_3" onclick="attDeptToggleDropdown(3,event)" style="min-height:52px;border:1.5px solid #fed7aa;border-radius:7px;padding:5px 8px;display:flex;flex-wrap:wrap;gap:4px;cursor:pointer;background:#fff;align-items:flex-start;align-content:flex-start;user-select:none;"></div>
+                <div id="attCfgDeptsDD_3" style="display:none;position:fixed;z-index:9999;background:#fff;border:1.5px solid #fed7aa;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);overflow:hidden;"></div>
               </div>
             </div>
           </div>
@@ -3730,13 +3733,127 @@ function extractTimeGlobal(row) {
   return null;
 }
 
+// ===== DEPT MULTI-SELECT for Attendance Settings =====
+let _attDeptSel={1:[],2:[],3:[]};
+let _attDDInited=false;
+const _attGC={
+  1:{b:'#bfdbfe',chip:'#dbeafe',text:'#1d4ed8',hov:'#eff6ff'},
+  2:{b:'#bbf7d0',chip:'#dcfce7',text:'#15803d',hov:'#f0fdf4'},
+  3:{b:'#fed7aa',chip:'#ffedd5',text:'#c2410c',hov:'#fff7ed'},
+};
+function _attDDSetup(){
+  if(_attDDInited)return; _attDDInited=true;
+  document.addEventListener('click',(e)=>{
+    [1,2,3].forEach(n=>{
+      const box=document.getElementById('attCfgDeptsBox_'+n);
+      const dd=document.getElementById('attCfgDeptsDD_'+n);
+      if(dd&&dd.style.display!=='none'&&!(box&&box.contains(e.target))&&!(dd&&dd.contains(e.target)))
+        dd.style.display='none';
+    });
+  });
+}
+function _attAllDepts(){
+  const all=new Set();
+  (appData.staff||[]).forEach(s=>{if(s.Department)all.add(s.Department.trim());});
+  Object.values(_attDeptSel).forEach(arr=>arr.forEach(d=>{if(d)all.add(d);}));
+  return [...all].sort((a,b)=>a.localeCompare(b));
+}
+function attDeptToggleDropdown(n,e){
+  if(e)e.stopPropagation();
+  const dd=document.getElementById('attCfgDeptsDD_'+n);
+  const box=document.getElementById('attCfgDeptsBox_'+n);
+  if(!dd||!box)return;
+  const wasOpen=dd.style.display!=='none';
+  [1,2,3].forEach(i=>{const d=document.getElementById('attCfgDeptsDD_'+i);if(d)d.style.display='none';});
+  if(wasOpen)return;
+  const r=box.getBoundingClientRect();
+  dd.style.left=r.left+'px'; dd.style.width=Math.max(r.width,220)+'px';
+  dd.style.top=(r.bottom+220>window.innerHeight?(r.top-228):(r.bottom+3))+'px';
+  _attBuildDD(n);
+  dd.style.display='block';
+  setTimeout(()=>{const s=document.getElementById('attDDSrch_'+n);if(s)s.focus();},40);
+}
+function _attDDSearch(n,val){
+  _attBuildDD(n,val);
+  setTimeout(()=>{const s=document.getElementById('attDDSrch_'+n);if(s){s.focus();s.setSelectionRange(val.length,val.length);}},0);
+}
+function _attBuildDD(n,filt){
+  const dd=document.getElementById('attCfgDeptsDD_'+n);if(!dd)return;
+  const sel=_attDeptSel[n]||[],c=_attGC[n];
+  const all=_attAllDepts().filter(d=>!filt||d.toLowerCase().includes(filt.toLowerCase()));
+  let h=`<div style="padding:6px 8px;border-bottom:1px solid #f1f5f9;background:#fafafa;">
+    <input id="attDDSrch_${n}" type="text" placeholder="ស្វែងរកផ្នែក..." value="${(filt||'').replace(/"/g,'&quot;')}"
+      oninput="_attDDSearch(${n},this.value)" onclick="event.stopPropagation()"
+      style="width:100%;padding:5px 9px;border:1.5px solid ${c.b};border-radius:6px;font-family:var(--font-km);font-size:12px;outline:none;background:#fff;">
+  </div><div style="max-height:168px;overflow-y:auto;">`;
+  if(!all.length){
+    h+='<div style="padding:14px;color:#94a3b8;font-size:12px;text-align:center;"><i class="fas fa-search" style="margin-right:5px;"></i>រកមិនឃើញផ្នែក...</div>';
+  } else {
+    all.forEach(d=>{
+      const isSel=sel.includes(d);
+      const inOther=[1,2,3].filter(x=>x!==n).some(x=>(_attDeptSel[x]||[]).includes(d));
+      const esc=d.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      h+=`<div onclick="attDeptToggle(${n},'${esc}',event)"
+        style="padding:8px 12px;font-size:13px;cursor:pointer;font-family:var(--font-km);display:flex;align-items:center;gap:8px;border-bottom:1px solid #f8fafc;background:${isSel?c.chip:'#fff'};"
+        onmouseover="this.style.background='${c.hov}'" onmouseout="this.style.background='${isSel?c.chip:'#fff'}'">
+        <span style="width:16px;height:16px;border-radius:4px;border:2px solid ${isSel?c.text:c.b};background:${isSel?c.text:'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#fff;font-weight:700;">${isSel?'✓':''}</span>
+        <span style="flex:1;color:${inOther&&!isSel?'#94a3b8':'var(--text)'};">${d}</span>
+        ${inOther&&!isSel?'<span style="font-size:10px;color:#cbd5e1;white-space:nowrap;">ក្រុមមួយទៀត</span>':''}
+      </div>`;
+    });
+  }
+  h+='</div>';
+  dd.innerHTML=h;
+}
+function attDeptToggle(n,dept,e){
+  if(e)e.stopPropagation();
+  if(!_attDeptSel[n])_attDeptSel[n]=[];
+  if(_attDeptSel[n].includes(dept)){
+    _attDeptSel[n]=_attDeptSel[n].filter(d=>d!==dept);
+  } else {
+    [1,2,3].forEach(i=>{if(i!==n&&_attDeptSel[i])_attDeptSel[i]=_attDeptSel[i].filter(d=>d!==dept);});
+    _attDeptSel[n].push(dept);
+    [1,2,3].filter(i=>i!==n).forEach(i=>_attRenderChips(i));
+  }
+  _attRenderChips(n);
+  const si=document.getElementById('attDDSrch_'+n);
+  const filt=si?si.value:'';
+  _attBuildDD(n,filt||undefined);
+  setTimeout(()=>{const s=document.getElementById('attDDSrch_'+n);if(s){s.value=filt;s.focus();s.setSelectionRange(filt.length,filt.length);}},0);
+}
+function attDeptRemove(n,dept,e){
+  if(e)e.stopPropagation();
+  _attDeptSel[n]=(_attDeptSel[n]||[]).filter(d=>d!==dept);
+  _attRenderChips(n);
+  [1,2,3].forEach(i=>{const dd=document.getElementById('attCfgDeptsDD_'+i);if(dd&&dd.style.display!=='none')_attBuildDD(i);});
+}
+function _attRenderChips(n){
+  const box=document.getElementById('attCfgDeptsBox_'+n);if(!box)return;
+  const sel=_attDeptSel[n]||[],c=_attGC[n];
+  let h='';
+  if(!sel.length){
+    h=`<span style="color:#94a3b8;font-size:12px;padding:2px 4px;align-self:center;flex:1;pointer-events:none;">ជ្រើសរើសផ្នែក...</span>`;
+  } else {
+    h=sel.map(d=>{
+      const esc=d.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<span style="display:inline-flex;align-items:center;gap:2px;background:${c.chip};border:1px solid ${c.b};border-radius:5px;padding:3px 7px;font-size:11px;color:${c.text};font-family:var(--font-km);white-space:nowrap;">${d}<span onclick="attDeptRemove(${n},'${esc}',event)" title="លុប" style="cursor:pointer;margin-left:3px;font-size:15px;line-height:1;opacity:.4;flex-shrink:0;" onmouseover="this.style.opacity=1;this.style.color='#ef4444'" onmouseout="this.style.opacity=.4;this.style.color='${c.text}'">×</span></span>`;
+    }).join('');
+  }
+  h+=`<span style="margin-left:auto;color:${c.text};opacity:.4;font-size:12px;align-self:center;flex-shrink:0;pointer-events:none;padding-left:4px;">▾</span>`;
+  box.innerHTML=h;
+}
+
 function openAttSettings() {
+  _attDDSetup();
   const s = getAttSettings();
   document.getElementById('attSettingsModal').style.display = 'flex';
   s.groups.forEach((g,i)=>{
     const n=i+1;
-    const ci=document.getElementById('attCfgCI_'+n), co=document.getElementById('attCfgCO_'+n), dp=document.getElementById('attCfgDepts_'+n);
-    if(ci) ci.value=g.checkIn; if(co) co.value=g.checkOut; if(dp) dp.value=String(g.depts||'');
+    const ci=document.getElementById('attCfgCI_'+n), co=document.getElementById('attCfgCO_'+n);
+    if(ci) ci.value=g.checkIn; if(co) co.value=g.checkOut;
+    _attDeptSel[n]=String(g.depts||'').split('\n').map(x=>x.trim()).filter(Boolean);
+    _attRenderChips(n);
+    const dd=document.getElementById('attCfgDeptsDD_'+n);if(dd)dd.style.display='none';
   });
   const ge=document.getElementById('attCfgLateGrace'), me=document.getElementById('attCfgLateMult');
   if(ge) ge.value=s.lateGraceHours; if(me) me.value=s.lateDeductMultiplier;
@@ -3744,7 +3861,10 @@ function openAttSettings() {
   if(hi) hi.checked=s.halfDayNoCheckIn; if(ho) ho.checked=s.halfDayNoCheckOut;
   updateAttCfgFormula(); attSettingsTab(1);
 }
-function closeAttSettings() { document.getElementById('attSettingsModal').style.display='none'; }
+function closeAttSettings() {
+  [1,2,3].forEach(n=>{const dd=document.getElementById('attCfgDeptsDD_'+n);if(dd)dd.style.display='none';});
+  document.getElementById('attSettingsModal').style.display='none';
+}
 
 function attSettingsTab(t) {
   [1,2].forEach(i=>{
@@ -3762,8 +3882,9 @@ function saveAttSettingsForm() {
   const s=getAttSettings();
   s.groups.forEach((g,i)=>{
     const n=i+1;
-    const ci=document.getElementById('attCfgCI_'+n), co=document.getElementById('attCfgCO_'+n), dp=document.getElementById('attCfgDepts_'+n);
-    if(ci) g.checkIn=ci.value; if(co) g.checkOut=co.value; if(dp) g.depts=dp.value.trim();
+    const ci=document.getElementById('attCfgCI_'+n), co=document.getElementById('attCfgCO_'+n);
+    if(ci) g.checkIn=ci.value; if(co) g.checkOut=co.value;
+    g.depts=(_attDeptSel[n]||[]).join('\n');
   });
   const ge=document.getElementById('attCfgLateGrace'), me=document.getElementById('attCfgLateMult');
   if(ge) s.lateGraceHours=Number(ge.value)||4; if(me) s.lateDeductMultiplier=Number(me.value)||2;
