@@ -775,13 +775,11 @@ async function doLogin() {
     let j = null;
 
     try {
-      // Method 1: normal fetch
       const r   = await fetch(fetchUrl, { method:'GET', cache:'no-store' });
       const txt = await r.text();
       const clean = txt.trim();
       j = JSON.parse(clean.startsWith('{') ? clean : clean.replace(/^[^{]*/,''));
     } catch(fe) {
-      // Method 2: no-cors fallback info
       showLoginErr('Network Error — ' + fe.message); return;
     }
 
@@ -812,7 +810,6 @@ async function doLogin() {
     });
 
     if (!staff) {
-      // Debug info for mobile
       console.log('[Login] email tried:', email, 'pass digits:', pass, 'pass len:', pass.length);
       showLoginErr('Gmail ឬ Password មិនត្រឹមត្រូវ'); return;
     }
@@ -829,10 +826,9 @@ async function doLogin() {
     // ── Save session permanently (clear only on explicit logout) ──
     currentStaff = staff;
     localStorage.setItem('sp_session', JSON.stringify(staff));
-    // Also save credentials for auto-refresh (encrypted with btoa)
     localStorage.setItem('sp_cred', btoa(JSON.stringify({ email, pass })));
 
-    // Remember Me checkbox (for pre-fill only — session persists regardless)
+    // Remember Me checkbox
     const remCb = document.getElementById('rememberMe');
     if (remCb && remCb.checked) {
       localStorage.setItem('sp_remember', JSON.stringify({ email, pass }));
@@ -844,9 +840,11 @@ async function doLogin() {
   } catch(e) {
     console.error('[Login] Error:', e);
     showLoginErr('Error: ' + e.message);
+  } finally {
+    // Always restore button — even if there was an early return inside try
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ចូលប្រព័ន្ធ';
   }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ចូលប្រព័ន្ធ';
 }
 
 function showLoginErr(msg) {
@@ -2078,20 +2076,6 @@ function showToast(msg, type) {
 
     return;
   }
-
-  // No valid session — auto-login from saved credentials if available
-  try {
-    const credRaw = localStorage.getItem('sp_cred');
-    if (credRaw) {
-      const { email, pass } = JSON.parse(atob(credRaw));
-      if (email && pass) {
-        document.getElementById('lgEmail').value = email;
-        document.getElementById('lgPass').value  = pass;
-        setTimeout(doLogin, 200);
-        return;
-      }
-    }
-  } catch(e) { localStorage.removeItem('sp_cred'); }
 
   // Greeting time
   const h = new Date().getHours();
