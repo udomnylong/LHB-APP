@@ -350,7 +350,6 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
     <!-- Profile menu -->
     <div class="profile-menu hidden" id="profileMenu">
       <div class="pmenu-item" onclick="showChangePwd()"><i class="fas fa-key"></i> ផ្លាស់ប្ដូរ Password</div>
-      <div class="pmenu-item danger" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> ចាកចេញ</div>
     </div>
   </div>
 
@@ -530,11 +529,6 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
       <span>ផ្លាស់ប្ដូរ Password</span>
       <i class="fas fa-chevron-right" style="margin-left:auto;font-size:11px;color:var(--text3);"></i>
     </button>
-    <button class="prof-action-btn" onclick="confirmLogout()" style="color:var(--red);">
-      <i class="fas fa-sign-out-alt" style="color:var(--red);"></i>
-      <span>ចាកចេញ</span>
-      <i class="fas fa-chevron-right" style="margin-left:auto;font-size:11px;color:var(--text3);"></i>
-    </button>
 
   </div>
 </div>
@@ -551,9 +545,6 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
     </button>
     <button class="nav-btn" onclick="showTab('profile')" id="nb-profile">
       <i class="fas fa-user"></i><span>គណនី</span>
-    </button>
-    <button class="nav-btn" onclick="confirmLogout()" id="nb-logout" style="color:#ef4444">
-      <i class="fas fa-sign-out-alt"></i><span style="color:#ef4444">ចាកចេញ</span>
     </button>
   </div>
 
@@ -824,6 +815,15 @@ async function doLogin() {
       // Debug info for mobile
       console.log('[Login] email tried:', email, 'pass digits:', pass, 'pass len:', pass.length);
       showLoginErr('Gmail ឬ Password មិនត្រឹមត្រូវ'); return;
+    }
+
+    // ── Check EmploymentStatus ──
+    const empStatus = (staff.EmploymentStatus || '').trim();
+    if (empStatus === 'បានឈប់') {
+      showLoginErr('⛔ គណនីត្រូវបានបិទ — មិនអាច Sign In បាន'); return;
+    }
+    if (empStatus === 'បានព្យួរ') {
+      showLoginErr('⛔ គណនីត្រូវបានព្យួរ — សូមទំនាក់ទំនង Admin'); return;
     }
 
     // ── Save session permanently (clear only on explicit logout) ──
@@ -1964,7 +1964,7 @@ function doLogout() {
 }
 
 function confirmLogout() {
-  if (confirm('តើអ្នកចង់ Sign Out មែនទេ?')) doLogout();
+  // Sign Out disabled — only Admin can clear session from system
 }
 
 // ════════════════════════════════════════════════
@@ -2026,6 +2026,13 @@ function showToast(msg, type) {
     try {
       const staff = JSON.parse(saved);
       if (!staff || !staff.ID) throw new Error('Invalid session');
+      // Block if cached status is already blocked
+      const cachedStatus = (staff.EmploymentStatus || '').trim();
+      if (cachedStatus === 'បានឈប់' || cachedStatus === 'បានព្យួរ') {
+        localStorage.removeItem('sp_session');
+        localStorage.removeItem('sp_cred');
+        throw new Error('Account blocked');
+      }
       currentStaff = staff;
       initApp(staff); // Load UI immediately from cached data
 
@@ -2044,6 +2051,17 @@ function showToast(msg, type) {
             (s.Gmail||'').toLowerCase().trim() === email.toLowerCase().trim()
           );
           if (fresh) {
+            // Auto-logout if employment status changed to blocked
+            const freshStatus = (fresh.EmploymentStatus || '').trim();
+            if (freshStatus === 'បានឈប់' || freshStatus === 'បានព្យួរ') {
+              console.warn('[Session] Account blocked — forcing logout');
+              localStorage.removeItem('sp_session');
+              localStorage.removeItem('sp_cred');
+              sessionStorage.clear();
+              currentStaff = null;
+              location.reload();
+              return;
+            }
             currentStaff = fresh;
             localStorage.setItem('sp_session', JSON.stringify(fresh));
             console.log('[Session] Staff data refreshed silently');
