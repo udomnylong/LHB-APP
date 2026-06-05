@@ -34,59 +34,89 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 #ptrIndicator {
   position: fixed;
   top: 0; left: 50%;
-  transform: translateX(-50%) translateY(-80px);
+  transform: translateX(-50%) translateY(-85px);
   z-index: 9999;
-  background: var(--surface2);
-  border-radius: 0 0 22px 22px;
-  border: 1px solid var(--border);
-  border-top: none;
-  padding: 10px 20px 14px;
+  background: rgba(10, 18, 42, 0.92);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border-radius: 100px;
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 8px 18px 8px 8px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04);
+  gap: 10px;
+  box-shadow: 0 16px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07);
   pointer-events: none;
-  min-width: 180px;
-  will-change: transform;
+  will-change: transform, opacity;
+  opacity: 0;
+  min-width: 0;
 }
 /* PTR Ring */
 .ptr-ring-wrap {
   position: relative;
-  width: 30px; height: 30px;
+  width: 34px; height: 34px;
   flex-shrink: 0;
+  border-radius: 50%;
 }
 .ptr-svg {
-  width: 30px; height: 30px;
+  width: 34px; height: 34px;
   transform: rotate(-90deg);
   display: block;
 }
 .ptr-track {
   fill: none;
-  stroke: var(--border);
-  stroke-width: 3;
+  stroke: rgba(255,255,255,0.07);
+  stroke-width: 2.5;
 }
 .ptr-arc {
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 3;
+  stroke: #6366f1;
+  stroke-width: 2.5;
   stroke-linecap: round;
   stroke-dasharray: 100.5;
   stroke-dashoffset: 100.5;
-  transition: stroke .3s, stroke-dashoffset .08s linear;
+  transition: stroke-dashoffset .08s linear, stroke .25s ease;
 }
 #ptrIco {
   position: absolute;
   top: 50%; left: 50%;
-  transform: translate(-50%,-50%);
+  transform: translate(-50%,-50%) rotate(0deg);
   font-size: 11px;
-  color: var(--accent);
+  color: rgba(255,255,255,.85);
   line-height: 1;
-  transition: opacity .2s, color .3s, transform .3s cubic-bezier(.34,1.56,.64,1);
+  transition: transform .35s cubic-bezier(.34,1.56,.64,1), color .25s, opacity .18s;
 }
-#ptrIndicator.ptr-done .ptr-arc { stroke: var(--green); }
-#ptrIndicator.ptr-done #ptrIco  { color: var(--green); }
-#ptrIndicator.ptr-loading #ptrIco { animation: spin .7s linear infinite; }
-.ptr-label { font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: .2px; white-space: nowrap; }
+/* Loading — spinning partial ring, icon hidden */
+#ptrIndicator.ptr-loading .ptr-svg {
+  animation: ptr-ring-spin .85s linear infinite;
+}
+#ptrIndicator.ptr-loading .ptr-arc {
+  stroke: #818cf8;
+  stroke-dashoffset: 28;
+  transition: stroke-dashoffset .2s ease;
+}
+#ptrIndicator.ptr-loading #ptrIco { opacity: 0; }
+#ptrIndicator.ptr-loading {
+  box-shadow: 0 16px 44px rgba(0,0,0,.55), 0 0 0 1px rgba(99,102,241,.22), 0 0 28px rgba(99,102,241,.18), inset 0 1px 0 rgba(255,255,255,.07);
+}
+/* Done — green ring + glow */
+#ptrIndicator.ptr-done .ptr-ring-wrap {
+  filter: drop-shadow(0 0 6px rgba(34,197,94,.42));
+}
+#ptrIndicator.ptr-done .ptr-arc {
+  stroke: #22c55e;
+  stroke-dashoffset: 0;
+  transition: stroke .2s, stroke-dashoffset .32s ease;
+}
+#ptrIndicator.ptr-done #ptrIco { color: #22c55e; }
+#ptrIndicator.ptr-done {
+  box-shadow: 0 16px 44px rgba(0,0,0,.55), 0 0 0 1px rgba(34,197,94,.25), 0 0 28px rgba(34,197,94,.16), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.ptr-label { font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,.65); letter-spacing: .2px; white-space: nowrap; }
+@keyframes ptr-ring-spin {
+  from { transform: rotate(-90deg); }
+  to   { transform: rotate(270deg); }
+}
 
 /* ── Login Screen ── */
 #loginScreen{background:linear-gradient(160deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);align-items:center;justify-content:center;padding:24px;}
@@ -2166,40 +2196,66 @@ if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
     if (state === 'pulling') {
       indicator.className = '';
       indicator.style.transition = 'none';
-      // Slide down proportionally to pull distance (0 → fully visible)
-      const yOff = Math.max(-80, (pullPct * 80) - 80);
+      const yOff    = Math.max(-85, (pullPct * 85) - 85);
+      const opacity = Math.max(0, Math.min(1, pullPct * 2));
       indicator.style.transform = 'translateX(-50%) translateY(' + yOff + 'px)';
-      // Fill arc ring 0→full as pullPct goes 0→1
-      if (arc) arc.style.strokeDashoffset = CIRC * (1 - Math.min(pullPct, 1));
-      // Arrow flip when ready
-      if (ico) ico.className = pullPct >= 1 ? 'fas fa-arrow-up' : 'fas fa-arrow-down';
+      indicator.style.opacity   = opacity;
+      if (arc) {
+        arc.style.strokeDashoffset = CIRC * (1 - Math.min(pullPct, 1));
+        arc.style.stroke = pullPct >= 1 ? '#a78bfa' : '#6366f1';
+      }
+      if (ico) {
+        const deg = Math.min(pullPct, 1) * 180;
+        ico.className = 'fas fa-arrow-down';
+        ico.style.transition = 'none';
+        ico.style.opacity = '1';
+        ico.style.transform = 'translate(-50%,-50%) rotate(' + deg + 'deg)';
+      }
       label.textContent = pullPct >= 1 ? 'លែងដើម្បី Refresh' : 'ទាញចុះ Refresh';
 
     } else if (state === 'loading') {
       indicator.className = 'ptr-loading';
-      indicator.style.transition = 'transform .3s cubic-bezier(.34,1.56,.64,1)';
-      indicator.style.transform  = 'translateX(-50%) translateY(0px)';
-      if (arc) arc.style.strokeDashoffset = 0;
-      if (ico) ico.className = 'fas fa-circle-notch';
+      indicator.style.transition = 'transform .38s cubic-bezier(.34,1.56,.64,1), opacity .25s, box-shadow .3s';
+      indicator.style.transform  = 'translateX(-50%) translateY(10px)';
+      indicator.style.opacity    = '1';
+      if (ico) ico.style.transition = 'opacity .15s';
       label.textContent = 'កំពុង Refresh...';
       if (navigator.vibrate) navigator.vibrate(12);
 
     } else if (state === 'done') {
       indicator.className = 'ptr-done';
-      indicator.style.transition = 'transform .3s cubic-bezier(.34,1.56,.64,1)';
-      indicator.style.transform  = 'translateX(-50%) translateY(0px)';
-      if (arc) arc.style.strokeDashoffset = 0;
-      if (ico) { ico.className = 'fas fa-check'; ico.style.transform = 'translate(-50%,-50%) scale(1.15)'; }
+      indicator.style.transition = 'transform .25s ease, box-shadow .3s';
+      indicator.style.transform  = 'translateX(-50%) translateY(10px)';
+      indicator.style.opacity    = '1';
+      if (arc) arc.style.strokeDashoffset = '0';
+      if (ico) {
+        ico.className = 'fas fa-check';
+        ico.style.opacity = '1';
+        ico.style.transition = 'none';
+        ico.style.transform = 'translate(-50%,-50%) scale(0)';
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          ico.style.transition = 'transform .42s cubic-bezier(.34,1.56,.64,1), color .25s';
+          ico.style.transform  = 'translate(-50%,-50%) scale(1.15)';
+        }));
+      }
       label.textContent = 'Refresh ជោគជ័យ!';
       if (navigator.vibrate) navigator.vibrate([10, 40, 20]);
 
     } else { // reset
-      indicator.className = '';
-      indicator.style.transition = 'transform .38s cubic-bezier(.4,0,.2,1)';
-      indicator.style.transform  = 'translateX(-50%) translateY(-80px)';
-      if (arc) { arc.style.strokeDashoffset = CIRC; arc.style.stroke = ''; }
-      if (ico) { ico.className = 'fas fa-arrow-down'; ico.style.transform = 'translate(-50%,-50%)'; }
-      label.textContent = 'ទាញចុះ Refresh';
+      indicator.style.transition = 'transform .42s cubic-bezier(.4,0,.2,1), opacity .35s';
+      indicator.style.transform  = 'translateX(-50%) translateY(-85px)';
+      indicator.style.opacity    = '0';
+      setTimeout(() => {
+        indicator.className = '';
+        if (arc) { arc.style.strokeDashoffset = CIRC; arc.style.stroke = ''; arc.style.transition = ''; }
+        if (ico) {
+          ico.className = 'fas fa-arrow-down';
+          ico.style.transform = 'translate(-50%,-50%) rotate(0deg)';
+          ico.style.transition = '';
+          ico.style.opacity = '1';
+        }
+        label.textContent = 'ទាញចុះ Refresh';
+      }, 430);
     }
   }
 
