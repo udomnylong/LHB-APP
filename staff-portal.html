@@ -745,8 +745,9 @@ const SU       = 'https://script.google.com/macros/s/AKfycbyGkImB6Mib3ZVImGYMhtC
 const BASE_URL = 'https://udomnylong.github.io/LHB-APP';
 const FOLDER_ID= '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';
 
-let currentStaff = null; // loaded staff data
-let staffData    = null; // full staff record
+let currentStaff   = null; // loaded staff data
+let staffData      = null; // full staff record
+let _syncInterval  = null; // auto-sync timer (declared here to avoid TDZ in boot IIFE)
 
 // ════════════════════════════════════════════════
 // LOGIN
@@ -2244,7 +2245,6 @@ if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
 })();
 
 // ── Auto Sync every 30 seconds ──
-let _syncInterval = null;
 function startAutoSync() {
   if (_syncInterval) clearInterval(_syncInterval);
   _syncInterval = setInterval(function() {
