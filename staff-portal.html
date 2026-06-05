@@ -2021,57 +2021,77 @@ function showToast(msg, type) {
   }
 
   // ── Restore session (persistent login) ──
-  const saved = localStorage.getItem('sp_session');
-  if (saved) {
-    try {
-      const staff = JSON.parse(saved);
-      if (!staff || !staff.ID) throw new Error('Invalid session');
-      // Block if cached status is already blocked
-      const cachedStatus = (staff.EmploymentStatus || '').trim();
-      if (cachedStatus === 'បានឈប់' || cachedStatus === 'បានព្យួរ') {
+  let _bootStaff = null;
+  try {
+    const saved = localStorage.getItem('sp_session');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.ID) {
+        const cachedStatus = (parsed.EmploymentStatus || '').trim();
+        if (cachedStatus === 'បានឈប់' || cachedStatus === 'បានព្យួរ') {
+          localStorage.removeItem('sp_session');
+          localStorage.removeItem('sp_cred');
+        } else {
+          _bootStaff = parsed;
+        }
+      } else {
         localStorage.removeItem('sp_session');
-        localStorage.removeItem('sp_cred');
-        throw new Error('Account blocked');
       }
-      currentStaff = staff;
-      initApp(staff); // Load UI immediately from cached data
+    }
+  } catch(e) { localStorage.removeItem('sp_session'); }
 
-      // Background refresh: silently update staff data from Sheet
-      // (keeps data fresh without forcing re-login)
-      setTimeout(async () => {
-        try {
-          const cred = localStorage.getItem('sp_cred');
-          if (!cred) return;
-          const { email } = JSON.parse(atob(cred));
-          if (!email) return;
-          const r = await fetch(SU + '?sheet=StaffInfo&t=' + Date.now(), { cache:'no-store' });
-          const j = await r.json();
-          if (!j || !j.data) return;
-          const fresh = j.data.find(s =>
-            (s.Gmail||'').toLowerCase().trim() === email.toLowerCase().trim()
-          );
-          if (fresh) {
-            // Auto-logout if employment status changed to blocked
-            const freshStatus = (fresh.EmploymentStatus || '').trim();
-            if (freshStatus === 'បានឈប់' || freshStatus === 'បានព្យួរ') {
-              console.warn('[Session] Account blocked — forcing logout');
-              localStorage.removeItem('sp_session');
-              localStorage.removeItem('sp_cred');
-              sessionStorage.clear();
-              currentStaff = null;
-              location.reload();
-              return;
-            }
-            currentStaff = fresh;
-            localStorage.setItem('sp_session', JSON.stringify(fresh));
-            console.log('[Session] Staff data refreshed silently');
+  if (_bootStaff) {
+    currentStaff = _bootStaff;
+    initApp(_bootStaff); // Load UI from cached data — errors here do NOT clear the session
+
+    // Background refresh: silently update staff data from Sheet
+    setTimeout(async () => {
+      try {
+        const cred = localStorage.getItem('sp_cred');
+        if (!cred) return;
+        const { email } = JSON.parse(atob(cred));
+        if (!email) return;
+        const r   = await fetch(SU + '?sheet=StaffInfo&t=' + Date.now(), { cache:'no-store' });
+        const txt = await r.text();
+        const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
+        if (!j || !j.data) return;
+        const fresh = j.data.find(s =>
+          (s.Gmail||'').toLowerCase().trim() === email.toLowerCase().trim()
+        );
+        if (fresh) {
+          const freshStatus = (fresh.EmploymentStatus || '').trim();
+          if (freshStatus === 'បានឈប់' || freshStatus === 'បានព្យួរ') {
+            console.warn('[Session] Account blocked — forcing logout');
+            localStorage.removeItem('sp_session');
+            localStorage.removeItem('sp_cred');
+            sessionStorage.clear();
+            currentStaff = null;
+            location.reload();
+            return;
           }
-        } catch(e) { console.warn('[Session] Background refresh failed:', e); }
-      }, 3000); // 3 sec after UI loads
+          currentStaff = fresh;
+          localStorage.setItem('sp_session', JSON.stringify(fresh));
+          console.log('[Session] Staff data refreshed silently');
+        }
+      } catch(e) { console.warn('[Session] Background refresh failed:', e); }
+    }, 3000);
 
-      return;
-    } catch(e) { localStorage.removeItem('sp_session'); }
+    return;
   }
+
+  // No valid session — auto-login from saved credentials if available
+  try {
+    const credRaw = localStorage.getItem('sp_cred');
+    if (credRaw) {
+      const { email, pass } = JSON.parse(atob(credRaw));
+      if (email && pass) {
+        document.getElementById('lgEmail').value = email;
+        document.getElementById('lgPass').value  = pass;
+        setTimeout(doLogin, 200);
+        return;
+      }
+    }
+  } catch(e) { localStorage.removeItem('sp_cred'); }
 
   // Greeting time
   const h = new Date().getHours();
