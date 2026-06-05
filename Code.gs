@@ -6,7 +6,7 @@ const SS_ID              = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const TELEGRAM_TOKEN     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN') || '';
 const TELEGRAM_CHAT      = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT')  || '549942306';
 const TELEGRAM_GROUP     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_Group') || '';
-const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbyGkImB6Mib3ZVImGYMhtCpYEq30RPZ6Mi-u2UeMDXdZZFD46OK8-oodUuAJWKcP2ri/exec';
+const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbxdUb5ViHMtyZCyzZ53Z4HGXaG_2PO9CeUisdKVwje-JxEPddrr5TnAMwX5iqASHkMh/exec';
 const FOOD_FOLDER_ID     = '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';
 const STAFF_PHOTO_FOLDER = '1BMeeqss2J_eoU-o8At7Wri-UNDzMO42DW7XzKeanz2vNgPrzJrICf5IL6OgAn6_ulWbS1B8X';
 const FOLDER_ID          = FOOD_FOLDER_ID;
@@ -421,14 +421,22 @@ function doPost(e) {
       var idIdx=headers.indexOf(keyField);
       if (idIdx<0) idIdx=headers.indexOf('ID');
       var keyVal=String(p.keyValue||p.id||'').trim();
+      // Optional secondary date key — matches StartDate or Date column
+      var keyDate=String(p.keyDate||'').trim();
+      var dateColIdx=-1;
+      if (keyDate) {
+        dateColIdx=headers.indexOf('StartDate');
+        if (dateColIdx<0) dateColIdx=headers.indexOf('Date');
+      }
       for (var i=1;i<data.length;i++){
         if (String(data[i][idIdx]).trim()===keyVal){
+          if (keyDate && dateColIdx>=0 && normDate(data[i][dateColIdx])!==keyDate) continue;
           var row=p.data||{};
           headers.forEach(function(h,j){if(row[h]!==undefined)ws.getRange(i+1,j+1).setValue(row[h]);});
           return respond({ status:'ok' });
         }
       }
-      return respond({ status:'error', msg:'Row not found: '+keyVal+' in '+keyField });
+      return respond({ status:'error', msg:'Row not found: '+keyVal+(keyDate?' @ '+keyDate:'')+' in '+keyField });
     }
 
     // ── delete ──

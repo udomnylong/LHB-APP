@@ -1227,7 +1227,7 @@ tbody tr:last-child td{border-bottom:none;}
 // ========== CONFIG ==========
 const SHEET_ID = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const API_KEY = ''; // Optional: add Google API key for public sheets
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyGkImB6Mib3ZVImGYMhtCpYEq30RPZ6Mi-u2UeMDXdZZFD46OK8-oodUuAJWKcP2ri/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxdUb5ViHMtyZCyzZ53Z4HGXaG_2PO9CeUisdKVwje-JxEPddrr5TnAMwX5iqASHkMh/exec';
 
 // Sheet names
 const SHEETS = {
@@ -1752,13 +1752,14 @@ async function deleteFromSheet(sheetName, keyField, keyValue) {
 }
 
 // Update a row in sheet
-async function updateInSheet(sheetName, keyField, keyValue, rowData) {
+async function updateInSheet(sheetName, keyField, keyValue, rowData, keyDate) {
   if (!APPS_SCRIPT_URL) return false;
   const hdrs = SHEET_HEADERS[sheetName] || Object.keys(rowData);
   const rowArr = hdrs.map(h => (rowData[h] !== undefined && rowData[h] !== null) ? String(rowData[h]) : '');
   const payload = { action: 'update', sheet: sheetName, keyField, keyValue: String(keyValue), data: rowData, row: rowArr, headers: hdrs };
+  if (keyDate) payload.keyDate = String(keyDate);
   try {
-    fetch(APPS_SCRIPT_URL, {
+    await fetch(APPS_SCRIPT_URL, {
       method: 'POST', mode: 'no-cors',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'text/plain' }
@@ -2602,7 +2603,11 @@ function openEditLeave(id, startDate) {
 async function deleteLeave(id, startDate) {
   if (!confirm('តើអ្នកចង់លុបការឈប់សម្រាកនេះ?')) return;
   appData.leave = appData.leave.filter(l => !(l.ID === id && l.StartDate === startDate));
-  await deleteFromSheet(SHEETS.leave, 'ID', id);
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST', mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action: 'deleteByIdDate', sheet: SHEETS.leave, keyId: id, keyDate: startDate })
+  });
   renderLeave();
   showToast('🗑️ លុបការឈប់សម្រាកជោគជ័យ!', 'success');
 }
@@ -2622,7 +2627,7 @@ async function saveLeave() {
   if (isLeaveEdit) appData.leave[leaveIdx] = row;
   else appData.leave.push(row);
   showLoading(true);
-  if (isLeaveEdit) await updateInSheet(SHEETS.leave, 'ID', row.ID, row);
+  if (isLeaveEdit) await updateInSheet(SHEETS.leave, 'ID', row.ID, row, row.StartDate);
   else await writeToSheet(SHEETS.leave, row, 'append');
   showLoading(false);
   closeModal('leaveFormModal');
@@ -2654,6 +2659,7 @@ async function updateLeaveStatus(id, startDate, status) {
         sheet:    'StaffLeave',
         keyField: 'ID',
         keyValue: String(id).trim(),
+        keyDate:  String(startDate).trim(),
         data:     { Status: status }
       })
     });
