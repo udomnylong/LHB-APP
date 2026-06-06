@@ -2363,10 +2363,10 @@ function renderAttendance() {
   populateProjectFilter('attProjectFilter', appData.staff, 'ProjectName');
 
   // Build attendance — VLookup: StaffInfo + Attendance + CheckIn + CheckOut
-  // HIDE employees who have resigned (បានឈប់)
+  // HIDE employees who have resigned (បានឈប់) or are suspended (បានព្យួរ)
   const _staffForAtt = appData.staff.filter(s => {
     const es = String(s.EmpStatus||s.EmploymentStatus||s['ស្ថានភាពការងារ']||s.emp_status||'').trim();
-    return es !== 'បានឈប់';
+    return es !== 'បានឈប់' && es !== 'បានព្យួរ';
   });
   let data = _staffForAtt.map(s => {
     const sid = String(s.ID).trim();
