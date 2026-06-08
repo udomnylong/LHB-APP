@@ -2283,7 +2283,12 @@ function openAddStaff(id) {
   } else {
     // Clear all fields for new staff
     document.getElementById('staffFormModal').querySelectorAll('input,select,textarea').forEach(el => el.value = '');
-    document.getElementById('sf_id').value = 'L-' + String(appData.staff.length + 1).padStart(5,'0');
+    // Auto ID = last highest numeric ID + 1 (safe against deletions/gaps)
+    const maxNum = appData.staff.reduce((max, s) => {
+      const m = (s.ID || '').match(/(\d+)$/);
+      return m ? Math.max(max, parseInt(m[1], 10)) : max;
+    }, 0);
+    document.getElementById('sf_id').value = 'L-' + String(maxNum + 1).padStart(5, '0');
     const empStatusEl = document.getElementById('sf_emp_status');
     if (empStatusEl) empStatusEl.value = 'កំពុងធ្វើការ';
   }
