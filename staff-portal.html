@@ -165,14 +165,20 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 .tag-proj{background:rgba(16,185,129,.15);color:#6ee7b7;}
 
 /* ── Today Status ── */
-.today-status{margin:0 16px 16px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;gap:12px;}
-.status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-.status-dot.in{background:var(--green);box-shadow:0 0 8px rgba(16,185,129,.5);}
-.status-dot.out{background:var(--orange);}
+.today-status{margin:0 16px 16px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:12px 16px;}
+.status-row{display:flex;align-items:center;gap:10px;}
+.status-row+.status-row{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+.status-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.status-dot.in{background:var(--green);box-shadow:0 0 6px rgba(16,185,129,.55);}
+.status-dot.out{background:var(--orange);box-shadow:0 0 6px rgba(245,158,11,.45);}
 .status-dot.none{background:var(--text3);}
 .status-label{font-size:13px;font-weight:600;color:var(--text);}
 .status-time{font-size:11px;color:var(--text2);margin-top:1px;}
-.status-leave{margin-left:auto;font-size:12px;font-weight:700;color:var(--green);}
+.status-badge{margin-left:auto;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;flex-shrink:0;}
+.status-badge.ci-badge{background:rgba(16,185,129,.15);color:var(--green);}
+.status-badge.co-badge{background:rgba(245,158,11,.15);color:var(--orange);}
+.status-badge.none-badge{background:rgba(100,116,139,.12);color:var(--text3);}
+.status-leave{font-size:12px;font-weight:700;color:var(--green);}
 
 /* ── Menu Grid ── */
 .menu-section{padding:0 16px 16px;}
@@ -502,12 +508,25 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 
     <!-- Today Status -->
     <div class="today-status" id="todayStatus">
-      <div class="status-dot none" id="sDot"></div>
-      <div>
-        <div class="status-label" id="sLabel">មិនទាន់ Check In</div>
-        <div class="status-time" id="sTime">ថ្ងៃនេះ</div>
+      <!-- Check In row -->
+      <div class="status-row">
+        <div class="status-dot none" id="sDotCI"></div>
+        <div style="flex:1;min-width:0;">
+          <div class="status-label" id="sLabelCI">មិនទាន់ Check In</div>
+          <div class="status-time" id="sTimeCI">ថ្ងៃនេះ</div>
+        </div>
+        <div class="status-badge none-badge" id="sBadgeCI">—</div>
+        <div class="status-leave" id="sLeaveLeft" style="margin-left:6px;"></div>
       </div>
-      <div class="status-leave" id="sLeaveLeft"></div>
+      <!-- Check Out row -->
+      <div class="status-row">
+        <div class="status-dot none" id="sDotCO"></div>
+        <div style="flex:1;min-width:0;">
+          <div class="status-label" id="sLabelCO">មិនទាន់ Check Out</div>
+          <div class="status-time" id="sTimeCO"></div>
+        </div>
+        <div class="status-badge none-badge" id="sBadgeCO">—</div>
+      </div>
     </div>
 
     <!-- GPS Project Status -->
@@ -1140,53 +1159,91 @@ async function loadLeaveBalance(id) {
 }
 
 // ════════════════════════════════════════════════
-// TODAY STATUS
+// TODAY STATUS  (Check In + Check Out)
 // ════════════════════════════════════════════════
+let _todayCI = false; // true = checked in today
+let _todayCO = false; // true = checked out today
+
+function _normalizeDate(raw) {
+  raw = String(raw || '').trim();
+  if (!raw) return '';
+  if (raw.includes('/')) {
+    const p = raw.split('/');
+    if (p[0].length === 4) return p[0] + '-' + p[1].padStart(2,'0') + '-' + p[2].padStart(2,'0');
+    if (p.length === 3)    return p[2] + '-' + p[0].padStart(2,'0') + '-' + p[1].padStart(2,'0');
+  }
+  return raw.slice(0, 10);
+}
+
 async function loadTodayStatus(id) {
   try {
     const now   = new Date();
     const today = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
+    const kh    = now.toLocaleDateString('km-KH', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
 
-    // Khmer date display
-    const kh = now.toLocaleDateString('km-KH', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+    // Fetch CheckIn + CheckOut in parallel
+    const [rCI, rCO] = await Promise.all([
+      fetch(SU + '?sheet=CheckIn&t='  + Date.now(), {redirect:'follow'}),
+      fetch(SU + '?sheet=CheckOut&t=' + Date.now(), {redirect:'follow'}),
+    ]);
+    const parseJ = async r => {
+      const t = await r.text();
+      return JSON.parse(t.startsWith('{') ? t : t.replace(/^[^{]*/,''));
+    };
+    const [jCI, jCO] = await Promise.all([parseJ(rCI), parseJ(rCO)]);
 
-    const r   = await fetch(SU + '?sheet=CheckIn&t=' + Date.now(), {redirect:'follow'});
-    const txt = await r.text();
-    const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
-
-    // Normalize sheet date to YYYY-MM-DD for comparison
-    const rec = (j.data||[]).find(x => {
-      if (String(x.ID||'').trim() !== String(id).trim()) return false;
-      const raw  = String(x.Date||'').trim();
-      // Handle: "2026-05-09", "2026/05/09", "5/9/2026", "09/05/2026"
-      let norm = raw;
-      if (raw.includes('/')) {
-        const parts = raw.split('/');
-        if (parts[0].length === 4) {
-          // YYYY/MM/DD
-          norm = parts[0] + '-' + parts[1].padStart(2,'0') + '-' + parts[2].padStart(2,'0');
-        } else if (parts.length === 3) {
-          // M/D/YYYY or D/M/YYYY — try YYYY-MM-DD
-          norm = parts[2] + '-' + parts[0].padStart(2,'0') + '-' + parts[1].padStart(2,'0');
-        }
-      }
-      return norm.slice(0,10) === today;
+    const matchRow = (data, sheetId) => (data||[]).find(x => {
+      if (String(x.ID||'').trim() !== String(sheetId).trim()) return false;
+      return _normalizeDate(x.Date) === today;
     });
 
-    const dot = document.getElementById('sDot');
-    const lbl = document.getElementById('sLabel');
-    const stm = document.getElementById('sTime');
+    const recCI = matchRow(jCI.data, id);
+    const recCO = matchRow(jCO.data, id);
 
-    if (rec) {
-      dot.className   = 'status-dot in';
-      lbl.textContent = '✅ Check In រួចហើយ';
-      const t = cleanTime(rec.Time || rec.CheckIn || '');
-      stm.textContent = (t ? t + ' · ' : '') + kh;
+    // Store state for duplicate-check gate
+    _todayCI = !!recCI;
+    _todayCO = !!recCO;
+
+    // ── Check In row ──
+    const dotCI = document.getElementById('sDotCI');
+    const lblCI = document.getElementById('sLabelCI');
+    const tmCI  = document.getElementById('sTimeCI');
+    const bdCI  = document.getElementById('sBadgeCI');
+    if (recCI) {
+      const t = cleanTime(recCI.Time || recCI.CheckIn || '');
+      dotCI.className    = 'status-dot in';
+      lblCI.textContent  = '✅ Check In រួចហើយ';
+      tmCI.textContent   = (t ? t + ' · ' : '') + kh;
+      bdCI.className     = 'status-badge ci-badge';
+      bdCI.textContent   = t || 'In';
     } else {
-      dot.className   = 'status-dot none';
-      lbl.textContent = 'មិនទាន់ Check In';
-      stm.textContent = kh;
+      dotCI.className    = 'status-dot none';
+      lblCI.textContent  = 'មិនទាន់ Check In';
+      tmCI.textContent   = kh;
+      bdCI.className     = 'status-badge none-badge';
+      bdCI.textContent   = '—';
     }
+
+    // ── Check Out row ──
+    const dotCO = document.getElementById('sDotCO');
+    const lblCO = document.getElementById('sLabelCO');
+    const tmCO  = document.getElementById('sTimeCO');
+    const bdCO  = document.getElementById('sBadgeCO');
+    if (recCO) {
+      const t = cleanTime(recCO.Time || recCO.CheckOut || '');
+      dotCO.className    = 'status-dot out';
+      lblCO.textContent  = '✅ Check Out រួចហើយ';
+      tmCO.textContent   = t ? t + ' · ' + kh : kh;
+      bdCO.className     = 'status-badge co-badge';
+      bdCO.textContent   = t || 'Out';
+    } else {
+      dotCO.className    = 'status-dot none';
+      lblCO.textContent  = 'មិនទាន់ Check Out';
+      tmCO.textContent   = '';
+      bdCO.className     = 'status-badge none-badge';
+      bdCO.textContent   = '—';
+    }
+
   } catch(e) { console.warn('loadTodayStatus:', e); }
 }
 
@@ -1350,6 +1407,11 @@ function goCheckOut() { _openCheckModal('checkout'); }
 
 function _openCheckModal(type) {
   if (!currentStaff) { showToast('⚠️ សូម Login ជាមុន','err'); return; }
+
+  // Block duplicate submission
+  if (type === 'checkin'  && _todayCI) { showToast('✅ បាន Check In រួចរាល់ហើយ!', 'ok');  return; }
+  if (type === 'checkout' && _todayCO) { showToast('✅ បាន Check Out រួចរាល់ហើយ!', 'ok'); return; }
+
   const gs = getGPSGateStatus();
   if (!gs.ok) { _showGPSBlockMsg(gs, type === 'checkin' ? 'Check In' : 'Check Out'); return; }
 
@@ -1514,6 +1576,9 @@ async function doCheckSubmit() {
     // ── Success UI ──
     btn.innerHTML = '<i class="fas fa-check check-success-ico"></i> ' + (ci ? 'Check In' : 'Check Out') + ' ✅';
     _checkMsg('✅ ' + (ci ? 'Check In' : 'Check Out') + ' ជោគជ័យ! — ' + row.Name + ' (' + time + ')', 'ok');
+
+    // ── Update local state immediately (before sheet refresh) ──
+    if (ci) _todayCI = true; else _todayCO = true;
 
     // ── Khmer Voice ──
     speakKhmer(ci ? 'Check In រួចរាល់' : 'Check Out រួចរាល់');
