@@ -315,6 +315,36 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 #gpsPulse{position:absolute;inset:-4px;border-radius:50%;pointer-events:none;background:transparent;}
 #gpsPulse.pulsing{animation:gpsPulseAnim 1.8s ease-out infinite;}
 
+/* ── Check In/Out Inline Modal ── */
+#checkModal .check-staff-row{display:flex;align-items:center;gap:12px;padding:16px 20px 12px;}
+#checkModal .check-av{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;}
+#checkModal .check-av img{width:100%;height:100%;object-fit:cover;}
+#checkModal .check-name{font-size:16px;font-weight:700;color:var(--text);}
+#checkModal .check-meta{font-size:11px;color:var(--text2);margin-top:2px;}
+.check-gps-row{display:flex;align-items:center;gap:10px;margin:0 20px 14px;padding:10px 14px;background:var(--surface2);border-radius:12px;border:1px solid var(--border);}
+.check-gdot{width:10px;height:10px;border-radius:50%;flex-shrink:0;transition:.3s;}
+.check-gdot.searching{background:var(--orange);animation:checkDotPulse 1.2s ease infinite;}
+.check-gdot.ok{background:var(--green);box-shadow:0 0 8px rgba(16,185,129,.5);}
+.check-gdot.warn{background:var(--orange);}
+.check-gdot.err{background:var(--red);}
+@keyframes checkDotPulse{0%,100%{opacity:1}50%{opacity:.35}}
+.check-gps-info{flex:1;min-width:0;}
+.check-gps-label{font-size:12px;font-weight:700;color:var(--text);}
+.check-gps-acc{font-size:10px;color:var(--text2);margin-top:1px;}
+.btn-check{width:calc(100% - 40px);margin:0 20px;padding:16px;border:none;border-radius:16px;color:#fff;font-family:var(--font);font-size:17px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:.2s;box-shadow:0 4px 20px rgba(0,0,0,.25);}
+.btn-check:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;}
+.btn-check:not(:disabled):active{transform:scale(.97);}
+.btn-check.ci{background:linear-gradient(135deg,#0d9e6e,#0a7a55);}
+.btn-check.co{background:linear-gradient(135deg,#e07b00,#b86200);}
+.check-msg{margin:10px 20px 0;padding:10px 14px;border-radius:10px;font-size:12px;font-weight:600;display:none;align-items:center;gap:8px;}
+.check-msg.show{display:flex;}
+.check-msg.ok{background:rgba(16,185,129,.12);color:#6ee7b7;border:1px solid rgba(16,185,129,.25);}
+.check-msg.err{background:rgba(239,68,68,.12);color:#fca5a5;border:1px solid rgba(239,68,68,.25);}
+.check-msg.warn{background:rgba(245,158,11,.12);color:#fcd34d;border:1px solid rgba(245,158,11,.25);}
+/* success animation */
+@keyframes checkSuccessPop{0%{transform:scale(.7);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+.check-success-ico{animation:checkSuccessPop .45s cubic-bezier(.34,1.56,.64,1) both;}
+
 /* ── Splash Screen (Facebook-style) ── */
 #splashScreen{
   position:fixed;inset:0;z-index:99999;
@@ -635,6 +665,45 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
   </div>
 
 </div><!-- end appScreen -->
+
+<!-- ═══ MODAL: CHECK IN / OUT ═══ -->
+<div class="modal-overlay" id="checkModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="checkModalTitle">🟢 Check In</div>
+      <button class="modal-close" onclick="closeCheckModal()"><i class="fas fa-times"></i></button>
+    </div>
+
+    <!-- Staff Row -->
+    <div class="check-staff-row">
+      <div class="check-av" id="checkAv">?</div>
+      <div>
+        <div class="check-name" id="checkName">—</div>
+        <div class="check-meta" id="checkMeta">—</div>
+      </div>
+    </div>
+
+    <!-- GPS Status -->
+    <div class="check-gps-row">
+      <div class="check-gdot searching" id="checkGdot"></div>
+      <div class="check-gps-info">
+        <div class="check-gps-label" id="checkGpsLabel">🛰️ GPS...</div>
+        <div class="check-gps-acc" id="checkGpsAcc"></div>
+      </div>
+    </div>
+
+    <!-- Message -->
+    <div class="check-msg" id="checkMsg"><i id="checkMsgIco" class="fas fa-info-circle"></i><span id="checkMsgTxt"></span></div>
+
+    <!-- Action Button -->
+    <button class="btn-check ci" id="checkBtn" disabled onclick="doCheckSubmit()">
+      <i class="fas fa-spinner spin" id="checkBtnIco"></i>
+      <span id="checkBtnTxt">Check In</span>
+    </button>
+    <div style="height:16px;"></div>
+  </div>
+</div>
 
 <!-- ═══ MODAL: LEAVE ═══ -->
 <div class="modal-overlay" id="leaveModal">
@@ -1271,24 +1340,197 @@ function getGPSGateStatus() {
   return { ok:false, code:'detecting' };
 }
 
-function goCheckIn() {
+// ─── Inline Check In / Out ───────────────────────────────────────────────────
+let _checkType = 'checkin'; // current modal type
+let _checkQD   = null;      // QR nav data for this session
+let _checkBusy = false;
+
+function goCheckIn()  { _openCheckModal('checkin');  }
+function goCheckOut() { _openCheckModal('checkout'); }
+
+function _openCheckModal(type) {
   if (!currentStaff) { showToast('⚠️ សូម Login ជាមុន','err'); return; }
   const gs = getGPSGateStatus();
-  if (!gs.ok) { _showGPSBlockMsg(gs, 'Check In'); return; }
-  saveStaffSession();
-  const qd = buildQRNav('checkin');
-  if (!qd) { showToast('🚫 GPS ត្រូវការ Check In — សូម Retry', 'err'); return; }
-  window.location.href = BASE_URL + '/qr-scan.html?d=' + encodeURIComponent(JSON.stringify(qd));
+  if (!gs.ok) { _showGPSBlockMsg(gs, type === 'checkin' ? 'Check In' : 'Check Out'); return; }
+
+  const qd = buildQRNav(type);
+  if (!qd) { showToast('🚫 GPS ត្រូវការ — សូម Retry', 'err'); return; }
+
+  _checkType = type;
+  _checkQD   = qd;
+  _checkBusy = false;
+
+  const ci = type === 'checkin';
+
+  // Title
+  document.getElementById('checkModalTitle').textContent = ci ? '🟢 Check In' : '🟡 Check Out';
+
+  // Staff info
+  const av = document.getElementById('checkAv');
+  const s  = currentStaff;
+  if (s.Photo && s.Photo.startsWith('http')) {
+    const fid = (s.Photo.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || s.Photo.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) || [])[1] || '';
+    const src = fid ? 'https://lh3.googleusercontent.com/d/' + fid : s.Photo;
+    av.innerHTML = '<img src="' + src + '" referrerpolicy="no-referrer" onerror="this.parentNode.textContent=\'' + (s.Name||'?')[0] + '\'">';
+  } else {
+    av.textContent = (s.Name || '?')[0];
+  }
+  document.getElementById('checkName').textContent = s.Name || '—';
+  document.getElementById('checkMeta').textContent = [s.ID, s.Position, s.Department].filter(Boolean).join(' · ');
+
+  // GPS row
+  _updateCheckGPS();
+
+  // Button
+  const btn = document.getElementById('checkBtn');
+  btn.className = 'btn-check ' + (ci ? 'ci' : 'co');
+  btn.disabled  = false;
+  document.getElementById('checkBtnIco').className = 'fas fa-' + (ci ? 'right-to-bracket' : 'right-from-bracket');
+  document.getElementById('checkBtnTxt').textContent = ci ? 'Check In' : 'Check Out';
+
+  // Clear message
+  _checkMsg('', '');
+
+  openModal('checkModal');
+  // Keep GPS label live while modal is open
+  _checkGpsTimer = setInterval(_updateCheckGPS, 2000);
 }
 
-function goCheckOut() {
-  if (!currentStaff) { showToast('⚠️ សូម Login ជាមុន','err'); return; }
+function closeCheckModal() {
+  clearInterval(_checkGpsTimer);
+  closeModal('checkModal');
+}
+
+let _checkGpsTimer = null;
+function _updateCheckGPS() {
+  const dot   = document.getElementById('checkGdot');
+  const label = document.getElementById('checkGpsLabel');
+  const acc   = document.getElementById('checkGpsAcc');
+  if (!dot) return;
   const gs = getGPSGateStatus();
-  if (!gs.ok) { _showGPSBlockMsg(gs, 'Check Out'); return; }
-  saveStaffSession();
-  const qd = buildQRNav('checkout');
-  if (!qd) { showToast('🚫 GPS ត្រូវការ Check Out — សូម Retry', 'err'); return; }
-  window.location.href = BASE_URL + '/qr-scan.html?d=' + encodeURIComponent(JSON.stringify(qd));
+  if (gs.ok) {
+    dot.className   = 'check-gdot ok';
+    label.textContent = '✅ GPS OK · ' + (gs.proj ? gs.proj.ProjectName : '');
+    acc.textContent = _gpsConfirmed ? '±' + Math.round(_gpsConfirmed.acc || 0) + 'm' : '';
+  } else if (gs.code === 'calibrating' || gs.code === 'detecting') {
+    dot.className   = 'check-gdot searching';
+    label.textContent = '⏳ GPS កំពុង Calibrate...';
+    acc.textContent = '';
+  } else if (gs.code === 'weak') {
+    dot.className   = 'check-gdot warn';
+    label.textContent = '📡 GPS Signal ខ្សោយ (±' + (gs.acc || '?') + 'm)';
+    acc.textContent = '';
+  } else {
+    dot.className   = 'check-gdot err';
+    label.textContent = '🚫 ' + (gs.code === 'outside' ? 'ក្រៅតំបន់ ' + gs.dist + 'm' : 'GPS Error');
+    acc.textContent = '';
+  }
+}
+
+function _checkMsg(txt, type) {
+  const el  = document.getElementById('checkMsg');
+  const ico = document.getElementById('checkMsgIco');
+  const sp  = document.getElementById('checkMsgTxt');
+  if (!txt) { el.className = 'check-msg'; return; }
+  sp.textContent = txt;
+  ico.className  = 'fas ' + (type === 'ok' ? 'fa-check-circle' : type === 'err' ? 'fa-exclamation-circle' : 'fa-triangle-exclamation');
+  el.className   = 'check-msg show ' + (type || 'warn');
+}
+
+// ─── Khmer Voice ──────────────────────────────────────────────────────────────
+function speakKhmer(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  // Prefer Khmer voice; fallback to any available
+  const voices = window.speechSynthesis.getVoices();
+  const kh = voices.find(v => /km|khmer/i.test(v.lang || v.name));
+  if (kh) utt.voice = kh;
+  utt.lang  = 'km-KH';
+  utt.rate  = 0.92;
+  utt.pitch = 1.05;
+  window.speechSynthesis.speak(utt);
+}
+// Pre-load voices (needed on some browsers)
+if (window.speechSynthesis) window.speechSynthesis.getVoices();
+
+// ─── Submit ───────────────────────────────────────────────────────────────────
+async function doCheckSubmit() {
+  if (_checkBusy || !currentStaff || !_checkQD) return;
+
+  const gs = getGPSGateStatus();
+  if (!gs.ok) {
+    _showGPSBlockMsg(gs, _checkType === 'checkin' ? 'Check In' : 'Check Out');
+    return;
+  }
+  const gps = _gpsConfirmed;
+  if (!gps) { _checkMsg('🚫 GPS ចាប់មិនបាន — សូមរង់ចាំ', 'err'); return; }
+
+  _checkBusy = true;
+  const btn = document.getElementById('checkBtn');
+  btn.disabled = true;
+  document.getElementById('checkBtnIco').className = 'fas fa-spinner spin';
+  document.getElementById('checkBtnTxt').textContent = 'កំពុង Sync...';
+  _checkMsg('⏳ កំពុងបញ្ចូល...', 'warn');
+
+  const ci   = _checkType === 'checkin';
+  const n    = new Date();
+  const pad  = x => String(x).padStart(2, '0');
+  const time = pad(n.getHours()) + ':' + pad(n.getMinutes());
+  const date = n.getFullYear() + '-' + pad(n.getMonth()+1) + '-' + pad(n.getDate());
+  const dept = currentStaff.Department || currentStaff.Position || '';
+  const sn   = ci ? 'CheckIn' : 'CheckOut';
+
+  const row = {
+    ID: currentStaff.ID || '', Name: currentStaff.Name || '',
+    Gmail: currentStaff.Gmail || '',
+    ProjectName: _checkQD.project || '',
+    Date: date, Time: time, Timestamp: n.toISOString(),
+    Latitude: gps.lat, Longitude: gps.lng, Accuracy: gps.acc,
+    LateEarly: '', Minutes: '0',
+    Position: currentStaff.Position || '', Department: dept,
+  };
+
+  try {
+    await fetch(SU, { method:'POST', mode:'cors', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ action:'append', sheet:sn, data:row }) });
+    fetch(SU, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({
+        action:'upsert', sheet:'Attendance', type:_checkType,
+        keyValue:row.ID, keyDate:date,
+        data:{ ID:row.ID, Name:row.Name, Position:row.Position, Department:dept,
+               ProjectName:row.ProjectName, Date:date,
+               CheckIn:  ci ? time : '', CheckOut: ci ? '' : time,
+               Late:'', Early:'', Status:'Present' }
+      })
+    }).catch(()=>{});
+
+    // Local history
+    const hKey  = 'hr_h_' + date;
+    const hist  = JSON.parse(localStorage.getItem(hKey) || '[]');
+    hist.unshift({ email:row.Gmail, name:row.Name, type:_checkType, time, id:row.ID });
+    localStorage.setItem(hKey, JSON.stringify(hist.slice(0, 20)));
+
+    // ── Success UI ──
+    btn.innerHTML = '<i class="fas fa-check check-success-ico"></i> ' + (ci ? 'Check In' : 'Check Out') + ' ✅';
+    _checkMsg('✅ ' + (ci ? 'Check In' : 'Check Out') + ' ជោគជ័យ! — ' + row.Name + ' (' + time + ')', 'ok');
+
+    // ── Khmer Voice ──
+    speakKhmer(ci ? 'Check In រួចរាល់' : 'Check Out រួចរាល់');
+
+    // Refresh today status
+    if (typeof loadTodayStatus === 'function') loadTodayStatus(currentStaff.ID);
+
+    // Auto-close after 2.5s
+    setTimeout(() => closeCheckModal(), 2500);
+
+  } catch(e) {
+    _checkMsg('❌ ' + (e.message || 'Error'), 'err');
+    btn.disabled = false;
+    document.getElementById('checkBtnIco').className = 'fas fa-' + (ci ? 'right-to-bracket' : 'right-from-bracket');
+    document.getElementById('checkBtnTxt').textContent = ci ? 'Check In' : 'Check Out';
+  }
+  _checkBusy = false;
 }
 
 function _showGPSBlockMsg(gs, action) {
@@ -1529,7 +1771,9 @@ function closeModal(id) {
 // Close on overlay click
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', function(e) {
-    if (e.target === this) closeModal(this.id);
+    if (e.target !== this) return;
+    if (this.id === 'checkModal') closeCheckModal();
+    else closeModal(this.id);
   });
 });
 
