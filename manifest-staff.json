@@ -39,14 +39,14 @@
     {
       "name": "Check In",
       "short_name": "Check In",
-      "url": "https://udomnylong.github.io/LHB-APP/qr-scan.html?d=%7B%22type%22%3A%22checkin%22%7D",
-      "description": "QR Check In"
+      "url": "https://udomnylong.github.io/LHB-APP/staff-portal.html#checkin",
+      "description": "Check In វត្តមានចូល"
     },
     {
       "name": "Check Out",
       "short_name": "Check Out",
-      "url": "https://udomnylong.github.io/LHB-APP/qr-scan.html?d=%7B%22type%22%3A%22checkout%22%7D",
-      "description": "QR Check Out"
+      "url": "https://udomnylong.github.io/LHB-APP/staff-portal.html#checkout",
+      "description": "Check Out វត្តមានចេញ"
     }
   ],
   "categories": [

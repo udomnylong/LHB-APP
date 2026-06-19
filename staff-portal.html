@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="application-name" content="LHB Staff">
 <meta name="theme-color" content="#0f172a">
-<link rel="apple-touch-icon" sizes="180x180" href="icon-staff-192.png"><rect width='180' height='180' rx='32' fill='%230f172a'/><text x='90' y='120' font-size='90' text-anchor='middle'>👤</text></svg>">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-staff-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@300;400;500;600;700&family=Noto+Sans+Khmer:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
@@ -155,7 +155,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 .profile-top{display:flex;align-items:center;gap:14px;}
 .profile-photo{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;border:2px solid rgba(59,130,246,.3);}
 .profile-photo img{width:100%;height:100%;object-fit:cover;}
-.profile-info{}
+.profile-info{flex:1;min-width:0;} 
 .profile-name{font-size:18px;font-weight:700;line-height:1.2;}
 .profile-id{font-size:12px;color:var(--accent);font-weight:600;margin-top:2px;}
 .profile-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
@@ -185,7 +185,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 .section-title{font-size:12px;font-weight:700;color:var(--text2);letter-spacing:.8px;text-transform:uppercase;margin-bottom:12px;}
 .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .menu-grid.three{grid-template-columns:1fr 1fr 1fr;}
-.menu-card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:16px;cursor:pointer;transition:.15s;display:flex;flex-direction:column;align-items:flex-start;gap:8px;position:relative;overflow:hidden;-webkit-user-select:none;}
+.menu-card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:16px;cursor:pointer;transition:.15s;display:flex;flex-direction:column;align-items:flex-start;gap:8px;position:relative;overflow:hidden;-webkit-user-select:none;user-select:none;}
 .menu-card:active{transform:scale(.96);opacity:.85;}
 .menu-card::after{content:'';position:absolute;inset:0;border-radius:var(--radius);opacity:0;transition:.2s;}
 .menu-card.ci::after{background:linear-gradient(135deg,rgba(16,185,129,.15),transparent);}
@@ -992,10 +992,10 @@ async function doLogin() {
     // ── Check EmploymentStatus ──
     const empStatus = (staff.EmploymentStatus || '').trim();
     if (empStatus === 'បានឈប់') {
-      showLoginErr('⛔ គណនីត្រូវបានបិទ — មិនអាច Sign In បាន'); return;
+      showLoginErr('គណនីត្រូវបានបិទ — មិនអាច Sign In បាន'); return;
     }
     if (empStatus === 'បានព្យួរ') {
-      showLoginErr('⛔ គណនីត្រូវបានព្យួរ — សូមទំនាក់ទំនង Admin'); return;
+      showLoginErr('គណនីត្រូវបានព្យួរ — សូមទំនាក់ទំនង Admin'); return;
     }
 
     // ── Save session permanently (clear only on explicit logout) ──
@@ -1135,6 +1135,15 @@ function initApp(staff) {
   // Show app
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('appScreen').classList.remove('hidden');
+
+  // Handle PWA shortcut deep links (#checkin / #checkout)
+  const _hash = location.hash;
+  if (_hash === '#checkin' || _hash === '#checkout') {
+    history.replaceState(null, '', location.pathname);
+    setTimeout(() => {
+      if (_hash === '#checkin') goCheckIn(); else goCheckOut();
+    }, 2500); // wait for GPS to initialize
+  }
 }
 
 // ════════════════════════════════════════════════
