@@ -3409,8 +3409,8 @@ function genQR(type) {
 
   let scanURL;
   if (isGitHub) {
-    // On GitHub: use direct URL to qr-scan.html
-    scanURL = GITHUB_BASE + 'qr-scan.html?d=' + encodeURIComponent(JSON.stringify(qrData));
+    // On GitHub: use staff-portal with checkin hash
+    scanURL = 'https://udomnylong.github.io/LHB-APP/staff-portal.html#checkin';
   } else {
     // Local: use Blob so it works offline
     if (_qrBlobURL) URL.revokeObjectURL(_qrBlobURL);

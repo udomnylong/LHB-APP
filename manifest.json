@@ -25,12 +25,12 @@
   ],
   "shortcuts": [
     {
-      "name": "Check In/Out",
-      "short_name": "QR Scan",
-      "url": "https://udomnylong.github.io/LHB-APP/qr-scan.html",
+      "name": "Staff Portal",
+      "short_name": "Staff",
+      "url": "https://udomnylong.github.io/LHB-APP/staff-portal.html",
       "icons": [
         {
-          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='16' fill='%230d9e6e'/><text x='48' y='68' font-size='56' text-anchor='middle'>📷</text></svg>",
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='16' fill='%230d9e6e'/><text x='48' y='68' font-size='56' text-anchor='middle'>👤</text></svg>",
           "sizes": "96x96"
         }
       ]

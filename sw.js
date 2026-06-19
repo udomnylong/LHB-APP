@@ -1,10 +1,9 @@
 // LHB HR System — Service Worker v1.0
 // Handles caching for offline PWA support
 
-const CACHE_NAME = 'lhb-app-v3';
+const CACHE_NAME = 'lhb-app-v4';
 const CACHE_URLS = [
   '/LHB-APP/hr-system.html',
-  '/LHB-APP/qr-scan.html',
   '/LHB-APP/food-scan.html',
   '/LHB-APP/staff-portal.html',
   '/LHB-APP/manifest.json',
