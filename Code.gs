@@ -1,15 +1,44 @@
 // ============================================================
-// LHB HR SYSTEM — Google Apps Script v5.4
+// LHB HR SYSTEM — Google Apps Script v5.5
 // ============================================================
 
 const SS_ID              = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
 const TELEGRAM_TOKEN     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN') || '';
 const TELEGRAM_CHAT      = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT')  || '549942306';
 const TELEGRAM_GROUP     = PropertiesService.getScriptProperties().getProperty('TELEGRAM_Group') || '';
-const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbxdUb5ViHMtyZCyzZ53Z4HGXaG_2PO9CeUisdKVwje-JxEPddrr5TnAMwX5iqASHkMh/exec';
+const WEBHOOK_URL        = 'https://script.google.com/macros/s/AKfycbwLvbmtgWiOMG-zssr8T_jgGPXEErvre4mekNlOYNKmzYSe4kjf5gzHgS5B5Pac0UHE/exec';
 const FOOD_FOLDER_ID     = '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';
 const STAFF_PHOTO_FOLDER = '1BMeeqss2J_eoU-o8At7Wri-UNDzMO42DW7XzKeanz2vNgPrzJrICf5IL6OgAn6_ulWbS1B8X';
 const FOLDER_ID          = FOOD_FOLDER_ID;
+
+// ============================================================
+// PERFORMANCE — Spreadsheet & Sheet Data Cache
+// ============================================================
+
+// Cache Spreadsheet object within one request execution (avoids repeated openById calls)
+var _ss = null;
+function getSS() {
+  if (!_ss) _ss = SpreadsheetApp.openById(SS_ID);
+  return _ss;
+}
+
+// Cache sheet data in CacheService (5 min TTL) — good for rarely-changing sheets like StaffInfo/User
+var SHEET_CACHE_TTL = 300;
+function getCachedSheetData(sheetName) {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get('sd_' + sheetName);
+  if (cached) {
+    try { return JSON.parse(cached); } catch(e) {}
+  }
+  var ws = getSS().getSheetByName(sheetName);
+  if (!ws) return null;
+  var data = ws.getDataRange().getValues();
+  try { cache.put('sd_' + sheetName, JSON.stringify(data), SHEET_CACHE_TTL); } catch(e) {}
+  return data;
+}
+function invalidateSheetCache(sheetName) {
+  try { CacheService.getScriptCache().remove('sd_' + sheetName); } catch(e) {}
+}
 
 // ============================================================
 // WORK SCHEDULE — ប្ដូរតាមពេលវេលាការងាររបស់ LHB
@@ -162,9 +191,9 @@ function doGet(e) {
 
     // ── checkSession via GET ──
     if (params.action === 'checkSession') {
-      var ss2=SpreadsheetApp.openById(SS_ID), ws2=ss2.getSheetByName('User');
+      var ws2=getSS().getSheetByName('User');
       if (!ws2) return respond({ status:'ok', active:false });
-      var data2=ws2.getDataRange().getValues(), hdrs2=data2[0].map(function(h){return String(h).trim();});
+      var data2=getCachedSheetData('User'), hdrs2=data2[0].map(function(h){return String(h).trim();});
       var uIdx2=hdrs2.indexOf('Username'), tIdx2=hdrs2.indexOf('SessionToken'), tsIdx2=hdrs2.indexOf('SessionTime');
       if (tIdx2<0||tsIdx2<0) return respond({ status:'ok', active:false });
       var username2=String(params.username||'').trim().toLowerCase();
@@ -186,9 +215,9 @@ function doGet(e) {
 
     // ── setSession via GET ──
     if (params.action === 'setSession') {
-      var ss3=SpreadsheetApp.openById(SS_ID), ws3=ss3.getSheetByName('User');
+      var ws3=getSS().getSheetByName('User');
       if (!ws3) return respond({ status:'error', msg:'User sheet not found' });
-      var data3=ws3.getDataRange().getValues(), hdrs3=data3[0].map(function(h){return String(h).trim();});
+      var data3=getCachedSheetData('User'), hdrs3=data3[0].map(function(h){return String(h).trim();});
       var uIdx3=hdrs3.indexOf('Username'), tIdx3=hdrs3.indexOf('SessionToken'), tsIdx3=hdrs3.indexOf('SessionTime');
       if (tIdx3<0) { ws3.getRange(1,ws3.getLastColumn()+1).setValue('SessionToken'); tIdx3=ws3.getLastColumn()-1; }
       if (tsIdx3<0) { ws3.getRange(1,ws3.getLastColumn()+1).setValue('SessionTime'); tsIdx3=ws3.getLastColumn()-1; }
@@ -199,6 +228,7 @@ function doGet(e) {
         if (String(data3[i3][uIdx3]||'').trim().toLowerCase()===username3) {
           ws3.getRange(i3+1,tIdx3+1).setValue(token3);
           ws3.getRange(i3+1,tsIdx3+1).setValue(now3);
+          invalidateSheetCache('User');
           return respond({ status:'ok' });
         }
       }
@@ -207,9 +237,9 @@ function doGet(e) {
 
     // ── clearSession via GET ──
     if (params.action === 'clearSession') {
-      var ss4=SpreadsheetApp.openById(SS_ID), ws4=ss4.getSheetByName('User');
+      var ws4=getSS().getSheetByName('User');
       if (!ws4) return respond({ status:'ok' });
-      var data4=ws4.getDataRange().getValues(), hdrs4=data4[0].map(function(h){return String(h).trim();});
+      var data4=getCachedSheetData('User'), hdrs4=data4[0].map(function(h){return String(h).trim();});
       var uIdx4=hdrs4.indexOf('Username'), tIdx4=hdrs4.indexOf('SessionToken'), tsIdx4=hdrs4.indexOf('SessionTime');
       if (tIdx4<0) return respond({ status:'ok' });
       var username4=String(params.username||'').trim().toLowerCase();
@@ -220,6 +250,7 @@ function doGet(e) {
           if (!token4 || stored4===token4) {
             ws4.getRange(i4+1,tIdx4+1).setValue('');
             ws4.getRange(i4+1,tsIdx4+1).setValue('');
+            invalidateSheetCache('User');
           }
           return respond({ status:'ok' });
         }
@@ -247,7 +278,7 @@ function doGet(e) {
     var sheet    = (sheetRaw && sheetRaw !== 'undefined' && sheetRaw !== 'null') ? sheetRaw : 'StaffInfo';
     Logger.log('Reading sheet: ' + sheet);
 
-    var ss = SpreadsheetApp.openById(SS_ID);
+    var ss = getSS();
     var ws = ss.getSheetByName(sheet);
     if (!ws) {
       var avail = ss.getSheets().map(function(s){ return s.getName(); }).join(', ');
@@ -311,9 +342,8 @@ function doPost(e) {
     if (p.action === 'sendOTP') {
       var phone = String(p.phone||'').replace(/[^0-9]/g,'');
       if (!phone || phone.length < 8) return respond({ status:'error', msg:'Phone invalid' });
-      var ss = SpreadsheetApp.openById(SS_ID);
-      var ws = ss.getSheetByName('StaffInfo');
-      var data = ws.getDataRange().getValues();
+      var ws = getSS().getSheetByName('StaffInfo');
+      var data = getCachedSheetData('StaffInfo');
       var hdrs = data[0].map(function(h){ return String(h).trim(); });
       var phoneIdx = hdrs.indexOf('Phone'), chatIdx = hdrs.indexOf('TelegramChatId');
       var otpIdx = hdrs.indexOf('OTP'), expIdx = hdrs.indexOf('OTPExpire');
@@ -333,6 +363,7 @@ function doPost(e) {
       var otp=String(Math.floor(100000+Math.random()*900000)), expire=new Date().getTime()+5*60*1000;
       ws.getRange(rowNum,otpIdx2+1).setValue(otp);
       ws.getRange(rowNum,expIdx2+1).setValue(expire);
+      invalidateSheetCache('StaffInfo');
       var name=String(data[rowNum-1][hdrs.indexOf('Name')]||'');
       UrlFetchApp.fetch('https://api.telegram.org/bot'+TELEGRAM_TOKEN+'/sendMessage',{
         method:'post',contentType:'application/json',muteHttpExceptions:true,
@@ -344,8 +375,8 @@ function doPost(e) {
     // ── verifyOTP ──
     if (p.action === 'verifyOTP') {
       var phone=String(p.phone||'').replace(/[^0-9]/g,''), code=String(p.code||'').trim();
-      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName('StaffInfo');
-      var data=ws.getDataRange().getValues(), hdrs=data[0].map(function(h){return String(h).trim();});
+      var ws=getSS().getSheetByName('StaffInfo');
+      var data=getCachedSheetData('StaffInfo'), hdrs=data[0].map(function(h){return String(h).trim();});
       var phoneIdx=hdrs.indexOf('Phone'), otpIdx=hdrs.indexOf('OTP'), expIdx=hdrs.indexOf('OTPExpire');
       if (otpIdx<0) return respond({ status:'error', msg:'OTP column missing. Run setupHeaders().' });
       var pn0=phone.replace(/^0+/,''), staffRow=null, rowNum=-1;
@@ -362,12 +393,13 @@ function doPost(e) {
       hdrs.forEach(function(h,j){staffObj[h]=staffRow[j]!==undefined?String(staffRow[j]):'';});
       ws.getRange(rowNum,otpIdx+1).setValue('');
       ws.getRange(rowNum,expIdx+1).setValue('');
+      invalidateSheetCache('StaffInfo');
       return respond({ status:'ok', staff:staffObj });
     }
 
     // ── append ──
     if (p.action === 'append') {
-      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName(p.sheet);
+      var ss=getSS(), ws=ss.getSheetByName(p.sheet);
       if (!ws) return respond({ status:'error', msg:'Sheet not found: '+p.sheet });
       var headers=ws.getRange(1,1,1,ws.getLastColumn()).getValues()[0].map(function(h){return String(h).trim();});
       var row=p.data||{};
@@ -382,7 +414,7 @@ function doPost(e) {
 
     // ── upsert ──
     if (p.action === 'upsert') {
-      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName(p.sheet);
+      var ss=getSS(), ws=ss.getSheetByName(p.sheet);
       if (!ws) return respond({ status:'error', msg:'Sheet not found: '+p.sheet });
       // ⛔ SECURITY: enforce server time for Attendance CheckIn/CheckOut
       if (p.sheet === 'Attendance' && (p.type === 'checkin' || p.type === 'checkout')) {
@@ -397,7 +429,9 @@ function doPost(e) {
           if (p.sheet === 'CheckIn' || p.sheet === 'CheckOut') {
             row = enforceServerTime_(row, p.sheet);
           }
-          headers.forEach(function(h,j){if(row[h]!==undefined&&row[h]!=='')ws.getRange(i+1,j+1).setValue(row[h]);});
+          // Batch write: merge into existing row, then setValues once (faster than N setValue calls)
+          var merged=headers.map(function(h,j){return (row[h]!==undefined&&row[h]!=='')?row[h]:data[i][j];});
+          ws.getRange(i+1,1,1,headers.length).setValues([merged]);
           sendCheckNotification(p.sheet, row);
           return respond({ status:'ok', action:'updated' });
         }
@@ -414,7 +448,7 @@ function doPost(e) {
 
     // ── update ──
     if (p.action === 'update') {
-      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName(p.sheet);
+      var ss=getSS(), ws=ss.getSheetByName(p.sheet);
       if (!ws) return respond({ status:'error', msg:'Sheet not found: '+p.sheet });
       var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
       var keyField=String(p.keyField||'ID').trim();
@@ -432,7 +466,9 @@ function doPost(e) {
         if (String(data[i][idIdx]).trim()===keyVal){
           if (keyDate && dateColIdx>=0 && normDate(data[i][dateColIdx])!==keyDate) continue;
           var row=p.data||{};
-          headers.forEach(function(h,j){if(row[h]!==undefined)ws.getRange(i+1,j+1).setValue(row[h]);});
+          // Batch write: merge into existing row, then setValues once (faster than N setValue calls)
+          var merged=headers.map(function(h,j){return row[h]!==undefined?row[h]:data[i][j];});
+          ws.getRange(i+1,1,1,headers.length).setValues([merged]);
           return respond({ status:'ok' });
         }
       }
@@ -441,7 +477,7 @@ function doPost(e) {
 
     // ── delete ──
     if (p.action === 'delete') {
-      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName(p.sheet);
+      var ss=getSS(), ws=ss.getSheetByName(p.sheet);
       if (!ws) return respond({ status:'error', msg:'Sheet not found: '+p.sheet });
       var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
       var keyField=String(p.keyField||'ID').trim();
@@ -456,7 +492,7 @@ function doPost(e) {
 
     // ── deleteByIdDate ──
     if (p.action === 'deleteByIdDate') {
-      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName(p.sheet);
+      var ss=getSS(), ws=ss.getSheetByName(p.sheet);
       if (!ws) return respond({ status:'ok', msg:'Sheet not found' });
       var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
       var idIdx=headers.indexOf('ID'), dateIdx=headers.indexOf('Date');
@@ -509,10 +545,9 @@ function doPost(e) {
       if (!uphotoUrl)      return respond({ status:'error', msg:'updateStaffPhoto: photoUrl required' });
       if (!ugmail && !uid) return respond({ status:'error', msg:'updateStaffPhoto: gmail or id required' });
       try {
-        var uss        = SpreadsheetApp.openById(SS_ID);
-        var uws        = uss.getSheetByName('StaffInfo');
+        var uws        = getSS().getSheetByName('StaffInfo');
         if (!uws)      return respond({ status:'error', msg:'StaffInfo sheet not found' });
-        var udata      = uws.getDataRange().getValues();
+        var udata      = getCachedSheetData('StaffInfo');
         var uhdrs      = udata[0].map(function(h){ return String(h).trim(); });
         var uhdrsLow   = uhdrs.map(function(h){ return h.toLowerCase(); });
 
@@ -552,6 +587,7 @@ function doPost(e) {
           }
         }
         SpreadsheetApp.flush();
+        invalidateSheetCache('StaffInfo');
 
         if (!uupdated) {
           // Log first 3 rows to help debug
@@ -573,7 +609,7 @@ function doPost(e) {
 
     // ── appendWithPhotos (Food) ──
     if (p.action === 'appendWithPhotos') {
-      var ss=SpreadsheetApp.openById(SS_ID);
+      var ss=getSS();
       var folder=DriveApp.getFolderById(p.folderId||FOOD_FOLDER_ID);
       var row=p.data||{};
       var photoFields={PhotoMorning:'photoMorning',PhotoLunch:'photoLunch',PhotoEvening:'photoEvening'};
@@ -597,9 +633,9 @@ function doPost(e) {
 
     // ── checkSession (POST) ──
     if (p.action === 'checkSession') {
-      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName('User');
+      var ws=getSS().getSheetByName('User');
       if (!ws) return respond({ status:'ok', active: false });
-      var data=ws.getDataRange().getValues(), hdrs=data[0].map(function(h){return String(h).trim();});
+      var data=getCachedSheetData('User'), hdrs=data[0].map(function(h){return String(h).trim();});
       var uIdx=hdrs.indexOf('Username'), tIdx=hdrs.indexOf('SessionToken'), tsIdx=hdrs.indexOf('SessionTime');
       if (tIdx<0||tsIdx<0) return respond({ status:'ok', active: false });
       var username=String(p.username||'').trim().toLowerCase();
@@ -620,9 +656,9 @@ function doPost(e) {
 
     // ── setSession (POST) ──
     if (p.action === 'setSession') {
-      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName('User');
+      var ws=getSS().getSheetByName('User');
       if (!ws) return respond({ status:'error', msg:'User sheet not found' });
-      var data=ws.getDataRange().getValues(), hdrs=data[0].map(function(h){return String(h).trim();});
+      var data=getCachedSheetData('User'), hdrs=data[0].map(function(h){return String(h).trim();});
       var uIdx=hdrs.indexOf('Username'), tIdx=hdrs.indexOf('SessionToken'), tsIdx=hdrs.indexOf('SessionTime');
       if (tIdx<0) { ws.getRange(1,ws.getLastColumn()+1).setValue('SessionToken'); tIdx=ws.getLastColumn()-1; hdrs.push('SessionToken'); }
       if (tsIdx<0) { ws.getRange(1,ws.getLastColumn()+1).setValue('SessionTime'); tsIdx=ws.getLastColumn()-1; hdrs.push('SessionTime'); }
@@ -633,6 +669,7 @@ function doPost(e) {
         if (String(data[i][uIdx]||'').trim().toLowerCase()===username) {
           ws.getRange(i+1,tIdx+1).setValue(token);
           ws.getRange(i+1,tsIdx+1).setValue(now);
+          invalidateSheetCache('User');
           return respond({ status:'ok' });
         }
       }
@@ -641,9 +678,9 @@ function doPost(e) {
 
     // ── clearSession (POST) ──
     if (p.action === 'clearSession') {
-      var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName('User');
+      var ws=getSS().getSheetByName('User');
       if (!ws) return respond({ status:'ok' });
-      var data=ws.getDataRange().getValues(), hdrs=data[0].map(function(h){return String(h).trim();});
+      var data=getCachedSheetData('User'), hdrs=data[0].map(function(h){return String(h).trim();});
       var uIdx=hdrs.indexOf('Username'), tIdx=hdrs.indexOf('SessionToken'), tsIdx=hdrs.indexOf('SessionTime');
       if (tIdx<0) return respond({ status:'ok' });
       var username=String(p.username||'').trim().toLowerCase();
@@ -654,6 +691,7 @@ function doPost(e) {
           if (!token || storedTok===token) {
             ws.getRange(i+1,tIdx+1).setValue('');
             ws.getRange(i+1,tsIdx+1).setValue('');
+            invalidateSheetCache('User');
           }
           return respond({ status:'ok' });
         }
@@ -695,8 +733,8 @@ function handleTelegramUpdate(body) {
 }
 
 function registerStaff(phone, chatId) {
-  var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName('StaffInfo');
-  var data=ws.getDataRange().getValues(), hdrs=data[0].map(function(h){return String(h).trim();});
+  var ws=getSS().getSheetByName('StaffInfo');
+  var data=getCachedSheetData('StaffInfo'), hdrs=data[0].map(function(h){return String(h).trim();});
   var phoneIdx=hdrs.indexOf('Phone'), nameIdx=hdrs.indexOf('Name'), idIdx=hdrs.indexOf('ID');
   var chatIdx=hdrs.indexOf('TelegramChatId');
   if(chatIdx<0){ws.getRange(1,ws.getLastColumn()+1).setValue('TelegramChatId');chatIdx=ws.getLastColumn()-1;}
@@ -705,6 +743,7 @@ function registerStaff(phone, chatId) {
     var p=String(data[i][phoneIdx]||'').replace(/[^0-9]/g,'');
     if(p===phone||p.replace(/^0+/,'')===pn0||p.slice(-9)===phone.slice(-9)){
       ws.getRange(i+1,chatIdx+1).setValue(chatId);
+      invalidateSheetCache('StaffInfo');
       return 'Register OK!\n'+String(data[i][nameIdx])+' ('+String(data[i][idIdx])+')\nPhone: 0'+pn0;
     }
   }
@@ -712,8 +751,8 @@ function registerStaff(phone, chatId) {
 }
 
 function getRegisteredInfo(chatId) {
-  var ss=SpreadsheetApp.openById(SS_ID), ws=ss.getSheetByName('StaffInfo');
-  var data=ws.getDataRange().getValues(), hdrs=data[0].map(function(h){return String(h).trim();});
+  var ws=getSS().getSheetByName('StaffInfo');
+  var data=getCachedSheetData('StaffInfo'), hdrs=data[0].map(function(h){return String(h).trim();});
   var chatIdx=hdrs.indexOf('TelegramChatId'), nameIdx=hdrs.indexOf('Name'), idIdx=hdrs.indexOf('ID');
   if(chatIdx<0)return null;
   for(var i=1;i<data.length;i++){if(String(data[i][chatIdx]).trim()===chatId)return 'Registered: '+data[i][nameIdx]+' ('+data[i][idIdx]+')';}
@@ -754,7 +793,7 @@ function respond(obj) {
 // SETUP HEADERS — v5.3
 // ============================================================
 function setupHeaders() {
-  var ss = SpreadsheetApp.openById(SS_ID);
+  var ss = getSS();
   var HEADERS = {
     User:       ['Username','Password','Name','Role','Email','Department','Position','SessionToken','SessionTime'],
     StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName',
@@ -795,7 +834,7 @@ function setupHeaders() {
 // ADD EmploymentStatus COLUMN
 // ============================================================
 function addEmploymentStatusColumn() {
-  var ss = SpreadsheetApp.openById(SS_ID);
+  var ss = getSS();
   var ws = ss.getSheetByName('StaffInfo');
   if (!ws) { Logger.log('❌ StaffInfo not found!'); return; }
   var lastCol  = ws.getLastColumn();
