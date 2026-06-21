@@ -180,6 +180,35 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 .status-badge.none-badge{background:rgba(100,116,139,.12);color:var(--text3);}
 .status-leave{font-size:12px;font-weight:700;color:var(--green);}
 
+/* ── Status Loading Overlay (Android Material style) ── */
+.today-status{position:relative;}
+#statusLoadingOverlay{
+  position:absolute;inset:0;border-radius:var(--radius);
+  background:rgba(15,23,42,.84);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;
+  z-index:8;transition:opacity .25s ease,visibility .25s ease;
+}
+#statusLoadingOverlay.hidden{opacity:0;visibility:hidden;pointer-events:none;}
+.md-ring{
+  width:34px;height:34px;
+  border:3.5px solid rgba(59,130,246,.15);
+  border-top-color:var(--accent);
+  border-right-color:rgba(59,130,246,.55);
+  border-radius:50%;
+  animation:md-ring-spin .72s cubic-bezier(.4,0,.2,1) infinite;
+}
+@keyframes md-ring-spin{to{transform:rotate(360deg)}}
+#statusLoadingOverlay .sl-text{font-size:11.5px;font-weight:600;color:var(--text2);letter-spacing:.25px;}
+.menu-card.skel{pointer-events:none;cursor:default;}
+.menu-card.skel::before{
+  content:'';position:absolute;inset:0;border-radius:var(--radius);z-index:3;
+  background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.07) 50%,transparent 65%);
+  background-size:250% 100%;
+  animation:card-shim 1.5s ease-in-out infinite;
+}
+.menu-card.skel .menu-icon,.menu-card.skel .menu-label,.menu-card.skel .menu-sub{opacity:.38;}
+@keyframes card-shim{0%{background-position:250% 0}100%{background-position:-250% 0}}
+
 /* ── Menu Grid ── */
 .menu-section{padding:0 16px 16px;}
 .section-title{font-size:12px;font-weight:700;color:var(--text2);letter-spacing:.8px;text-transform:uppercase;margin-bottom:12px;}
@@ -508,6 +537,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 
     <!-- Today Status -->
     <div class="today-status" id="todayStatus">
+      <!-- Android-style loading overlay -->
+      <div id="statusLoadingOverlay">
+        <div class="md-ring"></div>
+        <span class="sl-text">កំពុងទាញទិន្ន...</span>
+      </div>
       <!-- Check In row -->
       <div class="status-row">
         <div class="status-dot none" id="sDotCI"></div>
@@ -554,13 +588,13 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
     <div class="menu-section">
       <div class="section-title">វត្តមាន</div>
       <div class="menu-grid">
-        <div class="menu-card ci" onclick="goCheckIn()">
+        <div class="menu-card ci skel" id="menuCardCI" onclick="goCheckIn()">
           <div class="menu-icon">🟢</div>
           <div class="menu-label">វត្តមានចូល</div>
           <div class="menu-sub">Check In QR</div>
           <i class="fas fa-chevron-right menu-arrow"></i>
         </div>
-        <div class="menu-card co" onclick="goCheckOut()">
+        <div class="menu-card co skel" id="menuCardCO" onclick="goCheckOut()">
           <div class="menu-icon">🟡</div>
           <div class="menu-label">វត្តមានចេញ</div>
           <div class="menu-sub">Check Out QR</div>
@@ -1172,6 +1206,17 @@ async function loadLeaveBalance(id) {
 // ════════════════════════════════════════════════
 let _todayCI = false; // true = checked in today
 let _todayCO = false; // true = checked out today
+let _statusLoading = true; // true while loadTodayStatus is in-flight
+
+function _setStatusLoading(on) {
+  _statusLoading = on;
+  const ov = document.getElementById('statusLoadingOverlay');
+  if (ov) ov.classList.toggle('hidden', !on);
+  ['menuCardCI', 'menuCardCO'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('skel', on);
+  });
+}
 
 function _normalizeDate(raw) {
   raw = String(raw || '').trim();
@@ -1186,6 +1231,7 @@ function _normalizeDate(raw) {
 
 async function loadTodayStatus(id) {
   try {
+    _setStatusLoading(true);
     const now   = new Date();
     const today = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
     const kh    = now.toLocaleDateString('km-KH', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
@@ -1254,6 +1300,7 @@ async function loadTodayStatus(id) {
     }
 
   } catch(e) { console.warn('loadTodayStatus:', e); }
+  finally { _setStatusLoading(false); }
 }
 
 function pad2(n) { return String(n).padStart(2,'0'); }
@@ -1416,6 +1463,7 @@ function goCheckOut() { _openCheckModal('checkout'); }
 
 function _openCheckModal(type) {
   if (!currentStaff) { showToast('⚠️ សូម Login ជាមុន','err'); return; }
+  if (_statusLoading) { showToast('⏳ កំពុងទាញទិន្ន... សូមរង់ចាំបន្តិច', 'warn'); return; }
 
   // Block duplicate submission
   if (type === 'checkin'  && _todayCI) { showToast('✅ បាន Check In រួចរាល់ហើយ!', 'ok');  return; }
