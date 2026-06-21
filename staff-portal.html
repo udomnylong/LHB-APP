@@ -1229,9 +1229,9 @@ function _normalizeDate(raw) {
   return raw.slice(0, 10);
 }
 
-async function loadTodayStatus(id) {
+async function loadTodayStatus(id, silent = false) {
   try {
-    _setStatusLoading(true);
+    if (!silent) _setStatusLoading(true);
     const now   = new Date();
     const today = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
     const kh    = now.toLocaleDateString('km-KH', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
@@ -1300,7 +1300,7 @@ async function loadTodayStatus(id) {
     }
 
   } catch(e) { console.warn('loadTodayStatus:', e); }
-  finally { _setStatusLoading(false); }
+  finally { if (!silent) _setStatusLoading(false); }
 }
 
 function pad2(n) { return String(n).padStart(2,'0'); }
@@ -1640,8 +1640,8 @@ async function doCheckSubmit() {
     // ── Khmer Voice ──
     speakKhmer(ci ? 'Check In រួចរាល់' : 'Check Out រួចរាល់');
 
-    // Refresh today status
-    if (typeof loadTodayStatus === 'function') loadTodayStatus(currentStaff.ID);
+    // Refresh today status (silent — no overlay, user already in modal)
+    if (typeof loadTodayStatus === 'function') loadTodayStatus(currentStaff.ID, true);
 
     // Auto-close after 2.5s
     setTimeout(() => closeCheckModal(), 2500);
@@ -2725,7 +2725,7 @@ if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
     setIndicator('loading');
     try {
       if (currentStaff) {
-        await loadTodayStatus(currentStaff.ID);
+        await loadTodayStatus(currentStaff.ID, true);
         await loadLeaveBalance(currentStaff.ID);
       }
     } catch(e) { console.warn('[PTR] Refresh error:', e); }
@@ -2741,7 +2741,7 @@ function startAutoSync() {
   if (_syncInterval) clearInterval(_syncInterval);
   _syncInterval = setInterval(function() {
     if (currentStaff) {
-      loadTodayStatus(currentStaff.ID);
+      loadTodayStatus(currentStaff.ID, true);
       loadLeaveBalance(currentStaff.ID);
     }
   }, 30000);
@@ -2749,7 +2749,7 @@ function startAutoSync() {
 // Also sync when page becomes visible again
 document.addEventListener('visibilitychange', function() {
   if (!document.hidden && currentStaff) {
-    loadTodayStatus(currentStaff.ID);
+    loadTodayStatus(currentStaff.ID, true);
     loadLeaveBalance(currentStaff.ID);
   }
 });
