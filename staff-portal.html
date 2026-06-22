@@ -1804,11 +1804,14 @@ function startGPSDetection() {
           }
           updateGPSUI('green', '✅ ' + proj.ProjectName, `${proj.distance}m ពីគម្រោង | ±${aAcc}m`, true);
         } else {
-          // Outside radius — keep showing confirmed project if recently confirmed
-          const label = (_gpsConfirmed && proj.ProjectName === _gpsConfirmed.project.ProjectName)
-            ? '✅ ' + proj.ProjectName  // still confirmed, just temporary drift
-            : '📍 ' + proj.ProjectName;
-          updateGPSUI('orange', label, `ចម្ងាយ ${proj.distance}m | ±${aAcc}m`, false);
+          // Outside radius — invalidate confirmed if distance clearly exceeds radius + accuracy
+          const pRad = parseFloat(proj.Radius || proj.radius) || 100;
+          const clearlyOutside = proj.distance > pRad + aAcc;
+          if (clearlyOutside && _gpsConfirmed &&
+              proj.ProjectName === _gpsConfirmed.project.ProjectName) {
+            _gpsConfirmed = null;  // ❌ revoke — GPS confirms user is outside radius
+          }
+          updateGPSUI('orange', '📍 ' + proj.ProjectName, `ចម្ងាយ ${proj.distance}m | Radius ${pRad}m | ±${aAcc}m`, false);
         }
       } else {
         _gpsDetected = { lat:aLat, lng:aLng, acc:aAcc, project:null };
