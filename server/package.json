@@ -1,0 +1,16 @@
+{
+  "name": "lhb-hr-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LHB HR System backend (Cloud Run) and Sheets-to-Postgres migration tooling",
+  "main": "index.js",
+  "scripts": {
+    "migrate:etl": "node scripts/migrate-sheets-to-sql.js",
+    "db:schema": "node scripts/apply-schema.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "googleapis": "^140.0.1",
+    "pg": "^8.12.0"
+  }
+}
