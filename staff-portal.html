@@ -949,13 +949,22 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 // ════════════════════════════════════════════════
 // CONFIG
 // ════════════════════════════════════════════════
-const SU       = 'https://script.google.com/macros/s/AKfycbxdUb5ViHMtyZCyzZ53Z4HGXaG_2PO9CeUisdKVwje-JxEPddrr5TnAMwX5iqASHkMh/exec';
+const SU       = 'https://script.google.com/macros/s/AKfycbw0bUDBoP2b3a_cAsTZU8O4IBFgaDOTjPVrzg1I7ikAGS9Lz2G8fe1WPsTlr0ubEagA/exec';
 const BASE_URL = 'https://udomnylong.github.io/LHB-APP';
 const FOLDER_ID= '1Ue7-K0QPDVwQcRszw5xF7b3SH25yGj5y';
 
 let currentStaff   = null; // loaded staff data
 let staffData      = null; // full staff record
 let _syncInterval  = null; // auto-sync timer (declared here to avoid TDZ in boot IIFE)
+
+// Fetch with timeout — prevents infinite "loading" when server is unreachable
+function fetchWithTimeout(url, opts, ms) {
+  ms = ms || 15000;
+  const ctrl = new AbortController();
+  const id   = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, Object.assign({}, opts || {}, { signal: ctrl.signal }))
+    .finally(() => clearTimeout(id));
+}
 
 // ════════════════════════════════════════════════
 // LOGIN
@@ -984,12 +993,13 @@ async function doLogin() {
     let j = null;
 
     try {
-      const r   = await fetch(fetchUrl, { method:'GET', cache:'no-store' });
+      const r   = await fetchWithTimeout(fetchUrl, { method:'GET', cache:'no-store' }, 20000);
       const txt = await r.text();
       const clean = txt.trim();
       j = JSON.parse(clean.startsWith('{') ? clean : clean.replace(/^[^{]*/,''));
     } catch(fe) {
-      showLoginErr('Network Error — ' + fe.message); return;
+      const msg = fe.name === 'AbortError' ? 'Timeout — Server មិនឆ្លើយតប (20s)' : 'Network Error — ' + fe.message;
+      showLoginErr(msg); return;
     }
 
     if (!j || !j.data || !j.data.length) {
@@ -1185,7 +1195,7 @@ function initApp(staff) {
 // ════════════════════════════════════════════════
 async function loadLeaveBalance(id) {
   try {
-    const r   = await fetch(SU + '?sheet=StaffLeave&t=' + Date.now(), {redirect:'follow'});
+    const r   = await fetchWithTimeout(SU + '?sheet=StaffLeave&t=' + Date.now(), {redirect:'follow'});
     const txt = await r.text();
     const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
     const year = new Date().getFullYear();
@@ -1236,10 +1246,11 @@ async function loadTodayStatus(id, silent = false) {
     const today = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
     const kh    = now.toLocaleDateString('km-KH', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
 
-    // Fetch CheckIn + CheckOut in parallel
+    // Fetch only today's rows for this staff — server filters by id+date (much faster)
+    const qSuffix = '&id=' + encodeURIComponent(id) + '&date=' + today + '&t=' + Date.now();
     const [rCI, rCO] = await Promise.all([
-      fetch(SU + '?sheet=CheckIn&t='  + Date.now(), {redirect:'follow'}),
-      fetch(SU + '?sheet=CheckOut&t=' + Date.now(), {redirect:'follow'}),
+      fetchWithTimeout(SU + '?sheet=CheckIn'  + qSuffix, {redirect:'follow'}),
+      fetchWithTimeout(SU + '?sheet=CheckOut' + qSuffix, {redirect:'follow'}),
     ]);
     const parseJ = async r => {
       const t = await r.text();
@@ -1299,7 +1310,17 @@ async function loadTodayStatus(id, silent = false) {
       bdCO.textContent   = '—';
     }
 
-  } catch(e) { console.warn('loadTodayStatus:', e); }
+  } catch(e) {
+    console.warn('loadTodayStatus:', e);
+    if (!silent) {
+      const isTimeout = e.name === 'AbortError';
+      const msg = isTimeout ? '⚠️ Server មិនឆ្លើយតប — សូម Refresh' : '⚠️ ភ្ជាប់ Server មិនបាន';
+      const lbl = document.getElementById('sLabelCI');
+      const tm  = document.getElementById('sTimeCI');
+      if (lbl) lbl.textContent = msg;
+      if (tm)  tm.textContent  = isTimeout ? 'Timeout (15s) — ពិនិត្យ Internet' : e.message || '';
+    }
+  }
   finally { if (!silent) _setStatusLoading(false); }
 }
 
@@ -1688,7 +1709,7 @@ function getStaffProject() {
 // Load project data for GPS fence
 async function loadProjects() {
   try {
-    const r = await fetch(SU + '?sheet=Project&t=' + Date.now(), {redirect:'follow'});
+    const r = await fetchWithTimeout(SU + '?sheet=Project&t=' + Date.now(), {redirect:'follow'});
     const txt = await r.text();
     const j = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
     if (j.data && j.data.length) {

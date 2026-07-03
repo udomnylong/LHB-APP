@@ -37,7 +37,39 @@ function getCachedSheetData(sheetName) {
   return data;
 }
 function invalidateSheetCache(sheetName) {
-  try { CacheService.getScriptCache().remove('sd_' + sheetName); } catch(e) {}
+  try {
+    var c = CacheService.getScriptCache();
+    c.remove('sd_'    + sheetName);
+    c.remove('doget_' + sheetName);
+  } catch(e) {}
+}
+
+// Per-sheet cache TTL (seconds)
+function getCacheTTL(sheet, isFiltered) {
+  if (isFiltered) return 30;           // filtered id+date → 30s (changes on each check-in)
+  if (sheet === 'Project')   return 600;
+  if (sheet === 'StaffInfo') return 300;
+  if (sheet === 'CheckIn' || sheet === 'CheckOut') return 30;
+  if (sheet === 'StaffLeave'|| sheet === 'StaffOT') return 120;
+  return 60;
+}
+
+// ── Fast UTC+7 (Asia/Phnom_Penh) date helpers ──
+// Avoids Utilities.formatDate() which costs ~50ms per call (GAS API overhead)
+var PH_MS = 7 * 3600000;
+function phDateStr(d) {
+  var u = new Date(d.getTime() + PH_MS);
+  return u.getUTCFullYear() + '-' +
+    ('0'+(u.getUTCMonth()+1)).slice(-2) + '-' +
+    ('0'+u.getUTCDate()).slice(-2);
+}
+function phTimeStr(d) {
+  var u = new Date(d.getTime() + PH_MS);
+  return ('0'+u.getUTCHours()).slice(-2) + ':' + ('0'+u.getUTCMinutes()).slice(-2);
+}
+function phTimeStrFull(d) {
+  var u = new Date(d.getTime() + PH_MS);
+  return ('0'+u.getUTCHours()).slice(-2) + ':' + ('0'+u.getUTCMinutes()).slice(-2) + ':' + ('0'+u.getUTCSeconds()).slice(-2);
 }
 
 // ============================================================
@@ -59,8 +91,8 @@ const CHECKOUT_EARLY_M  = 0;
 // Mutates p.data and p.keyDate so the subsequent upsert logic uses server date.
 function enforceAttendanceTime_(p) {
   var now    = new Date();
-  var sDate  = Utilities.formatDate(now, TZ, 'yyyy-MM-dd');
-  var sTime  = Utilities.formatDate(now, TZ, 'HH:mm');
+  var sDate  = phDateStr(now);
+  var sTime  = phTimeStr(now);
   var sH     = parseInt(sTime.split(':')[0]);
   var sMn    = parseInt(sTime.split(':')[1]);
   var total  = sH * 60 + sMn;
@@ -107,8 +139,8 @@ function enforceAttendanceTime_(p) {
 }
 function enforceServerTime_(row, sheet) {
   var now      = new Date();
-  var sTime    = Utilities.formatDate(now, TZ, 'HH:mm:ss');
-  var sDate    = Utilities.formatDate(now, TZ, 'yyyy-MM-dd');
+  var sTime    = phTimeStrFull(now);
+  var sDate    = phDateStr(now);
   var sTs      = String(now.getTime());
 
   // ── Audit log: compare client time vs server time ──
@@ -276,7 +308,19 @@ function doGet(e) {
 
     var sheetRaw = String(params.sheet || '').trim();
     var sheet    = (sheetRaw && sheetRaw !== 'undefined' && sheetRaw !== 'null') ? sheetRaw : 'StaffInfo';
-    Logger.log('Reading sheet: ' + sheet);
+
+    // ── Server-side filter params (CheckIn/CheckOut fast path) ──
+    var filterId   = String(params.id   || '').trim();
+    var filterDate = String(params.date || '').trim();
+    var isFiltered = !!(filterId && filterDate);
+
+    // ── Output cache check ──
+    var outKey = 'doget_' + sheet + (isFiltered ? '_' + filterId + '_' + filterDate : '');
+    var sc = CacheService.getScriptCache();
+    if (!params.nocache) {
+      var hit = sc.get(outKey);
+      if (hit) return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON);
+    }
 
     var ss = getSS();
     var ws = ss.getSheetByName(sheet);
@@ -289,27 +333,46 @@ function doGet(e) {
     if (vals.length < 2) return respond({ status:'ok', data:[] });
 
     var headers = vals[0].map(function(h){ return String(h).trim(); });
+
+    // Pre-compute column indices for filter (avoid indexOf per row)
+    var idColIdx   = isFiltered ? headers.indexOf('ID')   : -1;
+    var dateColIdx = isFiltered ? headers.indexOf('Date') : -1;
+
     var rows = [];
     for (var i = 1; i < vals.length; i++) {
       var row = vals[i];
       if (!row.some(function(c){ return c !== '' && c !== null; })) continue;
+
+      // ── Server-side filter: skip non-matching rows early ──
+      if (isFiltered) {
+        var rId   = idColIdx   >= 0 ? String(row[idColIdx]   || '').trim() : '';
+        var rDate = dateColIdx >= 0 ? String(row[dateColIdx] || '').trim() : '';
+        if (row[dateColIdx] instanceof Date) rDate = phDateStr(row[dateColIdx]);
+        else rDate = rDate.slice(0, 10);
+        if (rId !== filterId || rDate !== filterDate) continue;
+      }
+
       var obj = {};
       headers.forEach(function(h, j) {
         var v = row[j];
         if (v instanceof Date) {
-          // Time-only cells in Sheets are stored as 1899-12-30T HH:mm:ss — format as HH:mm
+          // Time-only: 1899-12-30 → format as HH:mm (fast, no API call)
           if (v.getFullYear() === 1899 && v.getMonth() === 11 && v.getDate() === 30) {
-            v = Utilities.formatDate(v, TZ, 'HH:mm');
+            v = phTimeStr(v);
           } else {
-            v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+            v = phDateStr(v);
           }
         }
         obj[h] = (v !== undefined && v !== null) ? String(v) : '';
       });
       rows.push(obj);
     }
-    Logger.log('Sheet ' + sheet + ': ' + rows.length + ' rows');
-    return respond({ status:'ok', data:rows });
+
+    // ── Cache and return ──
+    var result = JSON.stringify({ status:'ok', data:rows });
+    try { sc.put(outKey, result, getCacheTTL(sheet, isFiltered)); } catch(e) {}
+    Logger.log('Sheet ' + sheet + ': ' + rows.length + ' rows (cached ' + getCacheTTL(sheet, isFiltered) + 's)');
+    return ContentService.createTextOutput(result).setMimeType(ContentService.MimeType.JSON);
 
   } catch(err) {
     Logger.log('doGet ERROR: ' + err.message);
@@ -408,6 +471,7 @@ function doPost(e) {
         row = enforceServerTime_(row, p.sheet);
       }
       ws.appendRow(headers.map(function(h){return row[h]!==undefined?row[h]:'';}));
+      invalidateSheetCache(p.sheet); // clear cache so next read is fresh
       sendCheckNotification(p.sheet, row);
       return respond({ status:'ok' });
     }
@@ -771,7 +835,7 @@ function sendCheckNotification(sheet, row) {
   try {
     if(sheet!=='CheckIn'&&sheet!=='CheckOut')return;
     // Use the enforced server time already stored in row.Time; fallback to now
-    var serverTime = (row['Time'] || '').substring(0, 5) || Utilities.formatDate(new Date(), TZ, 'HH:mm');
+    var serverTime = (row['Time'] || '').substring(0, 5) || phTimeStr(new Date());
     var emoji=sheet==='CheckIn'?'🟢':'🟡', type=sheet==='CheckIn'?'CHECK IN':'CHECK OUT';
     var msg=emoji+' '+type+' | '+serverTime+'\n\n'+(row.Name||'')+'  '+(row.ID||'')+'\n'+(row.Position||'')+' | '+(row.Department||'')+'\n'+(row.ProjectName||'');
     var target=TELEGRAM_GROUP||TELEGRAM_CHAT;
@@ -781,7 +845,7 @@ function sendCheckNotification(sheet, row) {
 
 function normDate(v) {
   if(!v)return '';
-  if(v instanceof Date)return Utilities.formatDate(v,Session.getScriptTimeZone(),'yyyy-MM-dd');
+  if(v instanceof Date) return phDateStr(v);
   return String(v).trim().slice(0,10);
 }
 
@@ -911,4 +975,43 @@ function verifyDeployment() {
 
 function testSendMessage() {
   sendTelegramMsg(TELEGRAM_CHAT, 'LHB HR v5.3 Test OK!');
+}
+
+// ============================================================
+// WARMUP — Run this via Time-based Trigger every 5 minutes
+// to keep the GAS script warm and avoid cold-start delays (2-5s)
+// Setup: Apps Script → Triggers → Add Trigger → warmup → Time-driven → Minutes timer → Every 5 minutes
+// ============================================================
+function warmup() {
+  try {
+    getSS(); // open spreadsheet to warm the connection
+    // Pre-cache the most-read sheets
+    var sheets = ['CheckIn', 'CheckOut', 'StaffInfo', 'Project'];
+    sheets.forEach(function(s) {
+      var outKey = 'doget_' + s;
+      if (!CacheService.getScriptCache().get(outKey)) {
+        var ws = getSS().getSheetByName(s);
+        if (!ws) return;
+        var vals = ws.getDataRange().getValues();
+        if (vals.length < 2) return;
+        var headers = vals[0].map(function(h){ return String(h).trim(); });
+        var rows = [];
+        for (var i = 1; i < vals.length; i++) {
+          var row = vals[i];
+          if (!row.some(function(c){ return c !== '' && c !== null; })) continue;
+          var obj = {};
+          headers.forEach(function(h, j) {
+            var v = row[j];
+            if (v instanceof Date) {
+              v = (v.getFullYear()===1899 && v.getMonth()===11 && v.getDate()===30) ? phTimeStr(v) : phDateStr(v);
+            }
+            obj[h] = (v !== undefined && v !== null) ? String(v) : '';
+          });
+          rows.push(obj);
+        }
+        try { CacheService.getScriptCache().put(outKey, JSON.stringify({status:'ok',data:rows}), getCacheTTL(s, false)); } catch(e) {}
+      }
+    });
+    Logger.log('[warmup] OK — ' + new Date().toISOString());
+  } catch(e) { Logger.log('[warmup] Error: ' + e.message); }
 }
