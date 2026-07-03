@@ -1389,12 +1389,22 @@ function generateToken() {
 }
 
 // ── Call Apps Script session actions via GET (avoids CORS preflight) ──
+async function fetchWithTimeout(url, options, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms || 15000);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function callSessionAction(action, payload) {
   try {
     const params = new URLSearchParams({ action });
     Object.keys(payload||{}).forEach(k => params.append(k, payload[k]||''));
     const url = APPS_SCRIPT_URL + '?' + params.toString() + '&t=' + Date.now();
-    const res = await fetch(url, { method: 'GET' });
+    const res = await fetchWithTimeout(url, { method: 'GET' }, 15000);
     return await res.json();
   } catch(e) {
     console.warn('[Session] API error:', e);
@@ -1414,6 +1424,16 @@ async function doLogin() {
     if (lBtn) { lBtn.disabled = false; lBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ចូលប្រព័ន្ធ'; }
   };
 
+  try {
+    await doLoginInner(u, p, lBtn, resetBtn);
+  } catch(e) {
+    console.error('[Login] Unexpected error:', e);
+    resetBtn();
+    showLoginError('មានបញ្ហាបច្ចេកទេស សូមព្យាយាមម្ដងទៀត! (' + (e && e.message ? e.message : 'unknown error') + ')');
+  }
+}
+
+async function doLoginInner(u, p, lBtn, resetBtn) {
   // Load users from sheet
   if (!appData.users || appData.users.length === 0) {
     try {
@@ -1679,7 +1699,7 @@ async function fetchSheet(sheetName) {
   // Method 1: Apps Script doGet (primary - handles CORS properly)
   try {
     const url = APPS_SCRIPT_URL + '?action=read&sheet=' + encodeURIComponent(sheetName) + '&t=' + Date.now();
-    const res = await fetch(url, { method: 'GET', redirect: 'follow' });
+    const res = await fetchWithTimeout(url, { method: 'GET', redirect: 'follow' }, 15000);
     const text = await res.text();
     // Handle Apps Script redirect wrapping
     let json;
