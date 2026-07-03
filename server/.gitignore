@@ -2,3 +2,6 @@ node_modules/
 .env
 service-account-key.json
 *.key.json
+# Google service-account keys are named <project-id>-<random-hex>.json — catch any stray ones
+scripts/*.json
+*-????????????.json
