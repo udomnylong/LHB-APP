@@ -3,11 +3,10 @@
 // check-in/out+attendance are migrated here. Everything else still goes
 // through the Apps Script URL each HTML file already has.
 //
-// TODO after the Cloud Run service is deployed: set window.LHB_API_BASE
-// (e.g. via a <script>window.LHB_API_BASE='https://lhb-hr-api-xxxx.a.run.app';</script>
-// tag before this file loads) — falls back to localhost for local dev/testing.
+// Override with window.LHB_API_BASE (set via a <script> tag before this file
+// loads) for local dev/testing against a different backend.
 (function (global) {
-  const API_BASE = global.LHB_API_BASE || 'http://localhost:8080';
+  const API_BASE = global.LHB_API_BASE || 'https://lhb-hr-api-860256256963.asia-southeast1.run.app';
   const TOKEN_KEY = 'lhbApiToken';
 
   function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
