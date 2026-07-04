@@ -661,7 +661,13 @@ tbody tr:last-child td{border-bottom:none;}
     <div id="page-structure" class="page-content" style="display:none;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
         <h2 style="font-size:20px;font-weight:700;color:var(--primary);">រចនាសម្ព័ន្ធក្រុមហ៊ុន</h2>
-        <button class="btn btn-success btn-sm" onclick="openAddDept()"><i class="fas fa-plus"></i>បន្ថែមផ្នែក</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <select id="structureExportFilter" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;">
+            <option value="">-- ទាំងអស់ (Export) --</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="exportStructureCSV()"><i class="fas fa-file-excel"></i>Export Excel</button>
+          <button class="btn btn-success btn-sm" onclick="openAddDept()"><i class="fas fa-plus"></i>បន្ថែមផ្នែក</button>
+        </div>
       </div>
       <div id="deptList"></div>
     </div>
@@ -3471,6 +3477,15 @@ function renderStructure() {
   const lvNum = lv => { const n=parseInt((lv||'99').replace(/[^0-9]/g,'')); return isNaN(n)?99:n; };
   const depts = [...new Set([...appData.staff.map(s => s.Department).filter(Boolean), ...appData.departments])];
 
+  // Keep the export filter dropdown in sync with current departments
+  const exportFilterEl = document.getElementById('structureExportFilter');
+  if (exportFilterEl) {
+    const prevValue = exportFilterEl.value;
+    exportFilterEl.innerHTML = '<option value="">-- ទាំងអស់ (Export) --</option>' +
+      depts.map(d => `<option value="${d}">${d}</option>`).join('');
+    if (depts.includes(prevValue)) exportFilterEl.value = prevValue;
+  }
+
   // ===== OC CHART — Tree by LV =====
   // Group staff by LV number
   const lvNum2 = lv => { const n=parseInt((lv||'99').replace(/[^0-9]/g,'')); return isNaN(n)?99:n; };
@@ -3518,10 +3533,11 @@ function renderStructure() {
   // Build node HTML
   function buildNode(s, lvN) {
     const photoUrl = s.Photo ? convertDriveUrl(s.Photo) : '';
+    const dblclick = `ondblclick="showStaffDetail('${s.ID}')" title="Double Click មើលព័ត៌មានបុគ្គលិក"`;
     const avatarHtml = photoUrl
-      ? `<img class="oc-avatar" src="${photoUrl}" onerror="this.style.display='none';this.nextSibling.style.display='flex';" alt="">
-         <div class="oc-avatar-ph" style="display:none;">${(cleanName(s.Name)||'?')[0]}</div>`
-      : `<div class="oc-avatar-ph">${(cleanName(s.Name)||'?')[0]}</div>`;
+      ? `<img class="oc-avatar" src="${photoUrl}" ${dblclick} style="cursor:pointer;" onerror="this.style.display='none';this.nextSibling.style.display='flex';" alt="">
+         <div class="oc-avatar-ph" ${dblclick} style="display:none;cursor:pointer;">${(cleanName(s.Name)||'?')[0]}</div>`
+      : `<div class="oc-avatar-ph" ${dblclick} style="cursor:pointer;">${(cleanName(s.Name)||'?')[0]}</div>`;
     const cardClass = lvN<=1?'lv1':lvN<=2?'lv2':'';
     return `<div class="oc-node">
       <div class="oc-card ${cardClass}">
@@ -4563,6 +4579,14 @@ function downloadCSV(content, filename) {
 }
 function exportStaffCSV() {
   downloadCSV(toCSV(staffFiltered, ['ID','Name','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','Salary','Gmail','BankName','BankNumber']), 'staff.csv');
+}
+function exportStructureCSV() {
+  const dept = (document.getElementById('structureExportFilter')||{}).value || '';
+  const rows = dept ? appData.staff.filter(s => (s.Department||'').trim() === dept) : appData.staff;
+  if (!rows.length) { showToast('⚠️ គ្មានទិន្នន័យត្រូវ Export', 'warning'); return; }
+  const filename = dept ? `structure_${dept}.csv` : 'structure_all.csv';
+  downloadCSV(toCSV(rows, ['ID','Name','Sex','LV','Position','Department','ProjectName','Salary']), filename);
+  showToast('✅ Export ' + rows.length + ' បុគ្គលិក ជោគជ័យ!', 'success');
 }
 function exportAttCSV() {
   // Export exactly what is currently displayed (respects all active filters)
