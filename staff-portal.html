@@ -1351,20 +1351,24 @@ function findTimeInRow(row, preferOut) {
   return '';
 }
 
-// Extract "HH:MM" from any time format, always returning browser-local time.
+// Extract "HH:MM" from any time format, always returning Cambodia (ICT, UTC+7) time.
 // Google Apps Script serializes Date objects as UTC ISO ("...T00:45:00.000Z"),
-// so we use new Date(s).getHours() to convert UTC → local (ICT +7 = correct).
+// so we shift by a fixed +7h and read back with getUTCHours/Minutes — this avoids
+// depending on the viewer's own device/browser timezone (see hr-system.html extractTime).
 function cleanTime(raw) {
   if (!raw) return '';
   const s = String(raw).trim();
   if (!s || s === '0') return '';
 
-  // ISO format (contains T): parse as Date → getHours/Minutes = browser local time
+  // ISO format (contains T): parse as Date, shift to UTC+7, read UTC getters
   // Works for both epoch time-only ("1899-12-30T...Z") and real datetimes ("2026-05-24T...Z")
   if (s.includes('T')) {
     try {
       const dt = new Date(s);
-      if (!isNaN(dt.getTime())) return pad2(dt.getHours()) + ':' + pad2(dt.getMinutes());
+      if (!isNaN(dt.getTime())) {
+        const ph = new Date(dt.getTime() + 7 * 3600000);
+        return pad2(ph.getUTCHours()) + ':' + pad2(ph.getUTCMinutes());
+      }
     } catch(e) {}
   }
 
