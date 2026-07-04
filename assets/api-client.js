@@ -98,6 +98,11 @@
     hasToken() { return !!getToken(); },
     clearToken() { setToken(null); },
 
+    // ── Admin: back up Cloud SQL data for the 5 migrated resources into the Sheet ──
+    async backupToSheets() {
+      return apiFetch('/api/admin/backup-to-sheets', { method: 'POST', timeoutMs: 60000 });
+    },
+
     // ── Users (Settings screen list — no password field, see server/routes/users.js) ──
     async getUsers() {
       const r = await apiFetch('/api/users', { method: 'GET' });

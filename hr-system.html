@@ -344,7 +344,7 @@ tbody tr:last-child td{border-bottom:none;}
       </div>
       <div class="topbar-right">
         <span class="topbar-date" id="currentDate"></span>
-        <button class="btn btn-outline btn-sm" onclick="syncAllData()"><i class="fas fa-sync-alt"></i>Sync</button>
+        <button class="btn btn-outline btn-sm" onclick="backupToGoogleSheet()"><i class="fas fa-cloud-upload-alt"></i>Back Up to Google Sheet</button>
       </div>
     </div>
 
@@ -5517,6 +5517,25 @@ async function syncAllData() {
     console.log('[HR] CheckOut rows loaded:', coData.length);
   }
   await loadAllData();
+}
+
+// Pushes current Cloud SQL data (User, StaffInfo, CheckIn, CheckOut, Attendance) back
+// into the Google Sheet as a backup snapshot — requires a real HR login (not the
+// admin/8285 client-side fallback, which has no session token to authenticate with).
+async function backupToGoogleSheet() {
+  if (!LhbApi.hasToken()) {
+    showToast('⚠️ ត្រូវការ Login ពិត (មិនមែន admin bypass) ដើម្បី Back Up', 'warning');
+    return;
+  }
+  showLoading(true);
+  showToast('☁️ កំពុង Back Up ទៅ Google Sheet...', 'warning');
+  const r = await LhbApi.backupToSheets();
+  showLoading(false);
+  if (!r._ok) {
+    showToast('❌ Back Up បរាជ័យ: ' + (r.msg || 'Unknown error'), 'warning');
+    return;
+  }
+  showToast(`✅ Back Up ជោគជ័យ! User:${r.users} StaffInfo:${r.staff} Attendance:${r.attendance} CheckIn:${r.checkIns} CheckOut:${r.checkOuts}`, 'success');
 }
 
 // ========== PAGINATION ==========

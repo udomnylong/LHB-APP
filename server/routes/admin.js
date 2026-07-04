@@ -1,6 +1,8 @@
 const express = require('express');
 const asyncHandler = require('../asyncHandler');
 const { runSync } = require('../syncCheckEvents');
+const { runBackup } = require('../backupToSheets');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -19,6 +21,15 @@ function requireCronSecret(req, res, next) {
 router.post('/sync-checkevents', requireCronSecret, asyncHandler(async (req, res) => {
   const result = await runSync();
   console.log('[sync-checkevents]', JSON.stringify(result));
+  res.json({ status: 'ok', ...result });
+}));
+
+// POST /api/admin/backup-to-sheets — HR-admin-triggered (real login token required).
+// Pushes current Cloud SQL data for the 5 migrated resources back into the Sheet as
+// a backup snapshot. See backupToSheets.js for why it's scoped to just those 5.
+router.post('/backup-to-sheets', requireAuth, asyncHandler(async (req, res) => {
+  const result = await runBackup();
+  console.log('[backup-to-sheets]', JSON.stringify(result));
   res.json({ status: 'ok', ...result });
 }));
 
