@@ -20,6 +20,25 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ status: 'ok', data: rows });
 }));
 
+// PUT /api/staff/:staffCode/photo — staff self-service profile photo update.
+// No auth, same as GET / above: staff-portal.html has no session token (its "login"
+// is a client-side Gmail+phone match), and the old Code.gs updateStaffPhoto action
+// had zero server-side auth too. This is what Cloud SQL needs updated so the photo
+// survives the next "Back Up to Google Sheet" run instead of getting overwritten —
+// the old code path only ever wrote the Sheet, never Cloud SQL.
+router.put('/:staffCode/photo', asyncHandler(async (req, res) => {
+  const { staffCode } = req.params;
+  const photoUrl = String(req.body.photoUrl || '').trim();
+  if (!photoUrl) return res.status(400).json({ status: 'error', msg: 'photoUrl required' });
+
+  const result = await pool.query(
+    'UPDATE staff SET photo_url = $2, updated_at = now() WHERE staff_code = $1',
+    [staffCode, photoUrl]
+  );
+  if (result.rowCount === 0) return res.status(404).json({ status: 'error', msg: 'Staff not found: ' + staffCode });
+  res.json({ status: 'ok' });
+}));
+
 router.use(requireAuth);
 
 // POST /api/staff — create

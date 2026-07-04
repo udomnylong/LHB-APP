@@ -2358,35 +2358,24 @@ async function handleProfilePhoto(input) {
     currentStaff._photoFileId = newFileId;
     saveStaffSession();
 
-    // ── 5. Update StaffInfo Sheet (blocking) ──
+    // ── 5. Persist to Cloud SQL (source of truth — the old code only wrote the
+    // Sheet here, so a photo update could get silently reverted by the next
+    // "Back Up to Google Sheet" run, which overwrites StaffInfo from Cloud SQL) ──
     const driveUrl = newFileId
       ? 'https://drive.google.com/file/d/' + newFileId + '/view?usp=sharing'
       : newUrl;
-
-    const _gm = (currentStaff.Gmail || currentStaff.email || currentStaff.Email || '').toLowerCase().trim();
     const _id = String(currentStaff.ID || currentStaff.StaffID || '').trim();
-    console.log('[updateStaffPhoto] sending → gmail:', _gm, '| id:', _id, '| url:', driveUrl);
 
     try {
-      const sr = await fetch(SU, {
-        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          action:   'updateStaffPhoto',
-          gmail:    _gm,
-          id:       _id,
-          photoUrl: driveUrl
-        })
-      });
-      const sj = await sr.json();
-      console.log('[updateStaffPhoto] response:', sj);
-      if (sj.status !== 'ok') {
-        showToast('⚠️ Sheet: ' + (sj.msg || 'Error'), 'err');
+      const sj = await LhbApi.updateStaffPhoto(_id, driveUrl);
+      if (!sj._ok) {
+        showToast('⚠️ Database: ' + (sj.msg || 'Error'), 'err');
       } else {
         showToast('✅ ប្ដូររូបថត Profile ជោគជ័យ!', 'ok');
       }
     } catch(e) {
       console.warn('[updateStaffPhoto] Network error:', e);
-      showToast('⚠️ Sheet sync failed — ' + e.message, 'err');
+      showToast('⚠️ Database sync failed — ' + e.message, 'err');
     }
 
   } catch(e) {

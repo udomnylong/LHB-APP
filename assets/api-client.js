@@ -130,6 +130,12 @@
     async deleteStaff(staffCode) {
       return apiFetch('/api/staff/' + encodeURIComponent(staffCode), { method: 'DELETE' });
     },
+    // No auth needed — staff self-service profile photo update (see server/routes/staff.js).
+    async updateStaffPhoto(staffCode, photoUrl) {
+      return apiFetch('/api/staff/' + encodeURIComponent(staffCode) + '/photo', {
+        method: 'PUT', body: JSON.stringify({ photoUrl }),
+      });
+    },
 
     // ── Attendance (real-time check-in/out; NOT for manual/backfill admin edits —
     // those stay on Apps Script, see the migration plan) ──
