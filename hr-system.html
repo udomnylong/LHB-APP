@@ -4588,7 +4588,10 @@ function printStaffCard() {
 
   const issueDate = new Date();
   const expiryDate = new Date(issueDate); expiryDate.setMonth(expiryDate.getMonth() + 6);
-  const fmt = d => d.toLocaleDateString('km-KH', { year:'numeric', month:'2-digit', day:'2-digit' });
+  const fmt = d => {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${String(d.getDate()).padStart(2,'0')}-${months[d.getMonth()]}-${d.getFullYear()}`;
+  };
 
   // Render QR into a throwaway offscreen div so the print window doesn't need to load the QR library itself.
   // QR encodes a link to verify-card.html, which looks the staff up live against the
