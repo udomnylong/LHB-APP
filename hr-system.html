@@ -663,7 +663,10 @@ tbody tr:last-child td{border-bottom:none;}
         <h2 style="font-size:20px;font-weight:700;color:var(--primary);">រចនាសម្ព័ន្ធក្រុមហ៊ុន</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <select id="structureExportFilter" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;">
-            <option value="">-- ទាំងអស់ (Export) --</option>
+            <option value="">-- ផ្នែក (ទាំងអស់) --</option>
+          </select>
+          <select id="structureProjectFilter" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;">
+            <option value="">-- គម្រោង (ទាំងអស់) --</option>
           </select>
           <button class="btn btn-outline btn-sm" onclick="exportStructureCSV()"><i class="fas fa-file-excel"></i>Export Excel</button>
           <button class="btn btn-success btn-sm" onclick="openAddDept()"><i class="fas fa-plus"></i>បន្ថែមផ្នែក</button>
@@ -905,7 +908,7 @@ tbody tr:last-child td{border-bottom:none;}
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('staffDetailModal')">បិទ</button>
-      <button class="btn btn-primary" onclick="printStaffCard()"><i class="fas fa-print"></i>Print</button>
+      <button class="btn btn-primary" onclick="printStaffCard()"><i class="fas fa-id-card"></i>Print Card</button>
     </div>
   </div>
 </div>
@@ -2135,6 +2138,7 @@ function showPage(page) {
 
 // ========== STAFF ==========
 let staffFiltered = [];
+let _currentDetailStaffId = null; // staff currently shown in staffDetailModal (for Print Card)
 function renderStaff(data) {
   if (data) staffFiltered = data;
   else staffFiltered = [...appData.staff];
@@ -2212,6 +2216,7 @@ async function deleteStaff(id) {
 function showStaffDetail(id) {
   const s = appData.staff.find(x => x.ID === id);
   if (!s) return;
+  _currentDetailStaffId = id;
   const photoUrl = s.Photo ? convertDriveUrl(s.Photo) : '';
   // Build photo element safely (avoid onerror escaping issues)
   const profileEl = document.getElementById('staffProfileContent');
@@ -3477,13 +3482,21 @@ function renderStructure() {
   const lvNum = lv => { const n=parseInt((lv||'99').replace(/[^0-9]/g,'')); return isNaN(n)?99:n; };
   const depts = [...new Set([...appData.staff.map(s => s.Department).filter(Boolean), ...appData.departments])];
 
-  // Keep the export filter dropdown in sync with current departments
+  // Keep the export filter dropdowns in sync with current departments/projects
   const exportFilterEl = document.getElementById('structureExportFilter');
   if (exportFilterEl) {
     const prevValue = exportFilterEl.value;
-    exportFilterEl.innerHTML = '<option value="">-- ទាំងអស់ (Export) --</option>' +
+    exportFilterEl.innerHTML = '<option value="">-- ផ្នែក (ទាំងអស់) --</option>' +
       depts.map(d => `<option value="${d}">${d}</option>`).join('');
     if (depts.includes(prevValue)) exportFilterEl.value = prevValue;
+  }
+  const projectFilterEl = document.getElementById('structureProjectFilter');
+  if (projectFilterEl) {
+    const prevProjValue = projectFilterEl.value;
+    const projects = [...new Set(appData.staff.map(s => s.ProjectName).filter(Boolean))];
+    projectFilterEl.innerHTML = '<option value="">-- គម្រោង (ទាំងអស់) --</option>' +
+      projects.map(p => `<option value="${p}">${p}</option>`).join('');
+    if (projects.includes(prevProjValue)) projectFilterEl.value = prevProjValue;
   }
 
   // ===== OC CHART — Tree by LV =====
@@ -4563,7 +4576,89 @@ function printStaff() {
 </body></html>`);
   w.document.close();
 }
-function printStaffCard() { printStaff(); }
+// Print a single employee ID card (from the staff detail modal) — logo, photo,
+// status, name, sex, start date, position, department, issue/expiry date, QR code.
+function printStaffCard() {
+  const s = appData.staff.find(x => x.ID === _currentDetailStaffId);
+  if (!s) { showToast('⚠️ សូមបើកព័ត៌មានបុគ្គលិកជាមុន', 'warning'); return; }
+
+  const photoUrl = s.Photo ? convertDriveUrl(s.Photo) : '';
+  const status = s.EmploymentStatus || 'កំពុងធ្វើការ';
+  const statusColor = status === 'បានឈប់' ? '#ef4444' : status === 'បានព្យួរ' ? '#f59e0b' : '#10b981';
+
+  const issueDate = new Date();
+  const expiryDate = new Date(issueDate); expiryDate.setFullYear(expiryDate.getFullYear() + 2);
+  const fmt = d => d.toLocaleDateString('km-KH', { year:'numeric', month:'2-digit', day:'2-digit' });
+
+  // Render QR into a throwaway offscreen div so the print window doesn't need to load the QR library itself.
+  const qrHolder = document.createElement('div');
+  qrHolder.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+  document.body.appendChild(qrHolder);
+  new QRCode(qrHolder, {
+    text: `LHB|${s.ID}|${s.Name}`,
+    width: 140, height: 140, colorDark: '#0f2540', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M,
+  });
+  setTimeout(() => {
+    const qrImg = qrHolder.querySelector('canvas') ? qrHolder.querySelector('canvas').toDataURL() : (qrHolder.querySelector('img')||{}).src || '';
+    document.body.removeChild(qrHolder);
+
+    const photoHtml = photoUrl
+      ? `<img src="${photoUrl}" style="width:110px;height:110px;border-radius:12px;object-fit:cover;border:3px solid #f59e0b;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+         <div style="display:none;width:110px;height:110px;border-radius:12px;background:#eef2f7;align-items:center;justify-content:center;color:#94a3b8;font-size:40px;"><i class="fas fa-user"></i></div>`
+      : `<div style="width:110px;height:110px;border-radius:12px;background:#eef2f7;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:40px;"><i class="fas fa-user"></i></div>`;
+
+    const w = window.open('', '_blank', 'width=480,height=720');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+      <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700;800&display=swap" rel="stylesheet">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+      <style>
+        *{box-sizing:border-box;}
+        body{font-family:'Kantumruy Pro',sans-serif;margin:0;padding:24px;background:#f1f5f9;display:flex;justify-content:center;}
+        .card{width:340px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.15);}
+        .card-header{background:linear-gradient(135deg,#0f2540 0%,#1a3c5e 100%);padding:18px 20px;text-align:center;}
+        .card-logo{font-size:28px;font-weight:900;color:#f59e0b;letter-spacing:6px;font-family:'Outfit',sans-serif;line-height:1;}
+        .card-company{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:4px;text-transform:uppercase;font-weight:700;}
+        .card-body{padding:20px;text-align:center;}
+        .card-status{display:inline-block;margin-bottom:14px;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${statusColor};}
+        .card-name{font-size:18px;font-weight:800;color:#0f2540;margin:10px 0 2px;}
+        .card-id{font-size:12px;color:#64748b;font-weight:600;margin-bottom:14px;}
+        .card-grid{text-align:left;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;padding:14px 4px;border-top:1px dashed #e2e8f0;border-bottom:1px dashed #e2e8f0;margin-bottom:16px;}
+        .card-grid .lbl{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;display:block;}
+        .card-grid .val{font-size:13px;color:#1e293b;font-weight:700;}
+        .card-qr{margin-top:4px;}
+        .card-qr img{width:100px;height:100px;}
+        .card-dates{display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:12px;padding:0 4px;}
+        @media print{body{background:#fff;padding:0;} .card{box-shadow:none;}}
+      </style>
+      </head><body>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-logo">LHB</div>
+            <div class="card-company">LAVISH HOME BUILD</div>
+          </div>
+          <div class="card-body">
+            <div class="card-status">${status}</div><br>
+            ${photoHtml}
+            <div class="card-name">${cleanName(s.Name)}</div>
+            <div class="card-id">${s.ID}</div>
+            <div class="card-grid">
+              <div><span class="lbl">ភេទ</span><span class="val">${s.Sex||'-'}</span></div>
+              <div><span class="lbl">កាលបរិច្ឆេទចូលធ្វើការ</span><span class="val">${formatDateDisplay(s.StartingDate)}</span></div>
+              <div><span class="lbl">មុខតំណែង</span><span class="val">${s.Position||'-'}</span></div>
+              <div><span class="lbl">ផ្នែក</span><span class="val">${s.Department||'-'}</span></div>
+            </div>
+            <div class="card-qr"><img src="${qrImg}" alt="QR"></div>
+            <div class="card-dates">
+              <span>ចេញកាត: ${fmt(issueDate)}</span>
+              <span>ផុតកំណត់: ${fmt(expiryDate)}</span>
+            </div>
+          </div>
+        </div>
+        <script>window.onload=()=>{window.print();}<\/script>
+      </body></html>`);
+    w.document.close();
+  }, 150);
+}
 
 // ========== EXPORT CSV ==========
 function toCSV(rows, headers) {
@@ -4582,9 +4677,12 @@ function exportStaffCSV() {
 }
 function exportStructureCSV() {
   const dept = (document.getElementById('structureExportFilter')||{}).value || '';
-  const rows = dept ? appData.staff.filter(s => (s.Department||'').trim() === dept) : appData.staff;
+  const proj = (document.getElementById('structureProjectFilter')||{}).value || '';
+  let rows = appData.staff;
+  if (dept) rows = rows.filter(s => (s.Department||'').trim() === dept);
+  if (proj) rows = rows.filter(s => (s.ProjectName||'').trim() === proj);
   if (!rows.length) { showToast('⚠️ គ្មានទិន្នន័យត្រូវ Export', 'warning'); return; }
-  const filename = dept ? `structure_${dept}.csv` : 'structure_all.csv';
+  const filename = ['structure', dept, proj, !dept && !proj ? 'all' : ''].filter(Boolean).join('_') + '.csv';
   downloadCSV(toCSV(rows, ['ID','Name','Sex','LV','Position','Department','ProjectName','Salary']), filename);
   showToast('✅ Export ' + rows.length + ' បុគ្គលិក ជោគជ័យ!', 'success');
 }
