@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LHB Staff Card Verify</title>
+<link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700;800&family=Outfit:wght@800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  *{box-sizing:border-box;}
+  body{font-family:'Kantumruy Pro',sans-serif;margin:0;min-height:100vh;background:linear-gradient(135deg,#0f2540 0%,#1a3c5e 60%,#2563a8 100%);
+    display:flex;align-items:center;justify-content:center;padding:20px;}
+  .card{width:100%;max-width:360px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.3);}
+  .header{background:linear-gradient(135deg,#0f2540 0%,#1a3c5e 100%);padding:20px;text-align:center;}
+  .logo{font-size:26px;font-weight:800;color:#f59e0b;letter-spacing:6px;font-family:'Outfit',sans-serif;}
+  .company{color:rgba(255,255,255,.7);font-size:10px;letter-spacing:2px;margin-top:4px;text-transform:uppercase;font-weight:700;}
+  .body{padding:24px;text-align:center;}
+  .state{padding:40px 10px;color:#64748b;}
+  .state i{font-size:36px;display:block;margin-bottom:12px;}
+  .photo{width:100px;height:100px;border-radius:12px;object-fit:cover;border:3px solid #f59e0b;margin:0 auto 12px;display:block;}
+  .photo-ph{width:100px;height:100px;border-radius:12px;background:#eef2f7;display:flex;align-items:center;justify-content:center;
+    color:#94a3b8;font-size:36px;margin:0 auto 12px;}
+  .status{display:inline-block;margin-bottom:10px;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;}
+  .status.active{background:#10b981;}
+  .status.resigned{background:#ef4444;}
+  .status.suspended{background:#f59e0b;}
+  .name{font-size:19px;font-weight:800;color:#0f2540;margin:8px 0 2px;}
+  .id{font-size:12px;color:#64748b;font-weight:600;margin-bottom:16px;}
+  .grid{text-align:left;display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;padding:16px 4px;
+    border-top:1px dashed #e2e8f0;border-bottom:1px dashed #e2e8f0;margin-bottom:14px;}
+  .grid .lbl{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;display:block;}
+  .grid .val{font-size:13px;color:#1e293b;font-weight:700;}
+  .verified{display:flex;align-items:center;justify-content:center;gap:6px;color:#10b981;font-size:12px;font-weight:700;}
+  .disclaimer{margin-top:14px;font-size:10px;color:#94a3b8;line-height:1.5;}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo">LHB</div>
+      <div class="company">LAVISH HOME BUILD</div>
+    </div>
+    <div class="body" id="content">
+      <div class="state"><i class="fas fa-spinner fa-spin"></i>កំពុងផ្ទៀងផ្ទាត់...</div>
+    </div>
+  </div>
+
+<script src="assets/api-client.js"></script>
+<script>
+function convertDriveUrl(url) {
+  if (!url) return '';
+  const m = url.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || url.match(/[?&]id=([a-zA-Z0-9_-]{20,})/);
+  return m ? 'https://lh3.googleusercontent.com/d/' + m[1] : url;
+}
+function formatDateDisplay(v) {
+  if (!v) return '-';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('en-GB');
+}
+
+(async function verify() {
+  const params = new URLSearchParams(location.search);
+  const id = (params.get('id') || '').trim();
+  const content = document.getElementById('content');
+
+  if (!id) {
+    content.innerHTML = '<div class="state"><i class="fas fa-triangle-exclamation"></i>QR មិនត្រឹមត្រូវ — គ្មាន Staff ID</div>';
+    return;
+  }
+
+  const r = await LhbApi.getStaff().catch(() => ({ _ok: false }));
+  if (!r._ok) {
+    content.innerHTML = '<div class="state"><i class="fas fa-wifi"></i>មិនអាចភ្ជាប់ Server បាន — សូមព្យាយាមម្តងទៀត</div>';
+    return;
+  }
+
+  const s = (r.data || []).find(x => String(x.ID || '').trim() === id);
+  if (!s) {
+    content.innerHTML = '<div class="state"><i class="fas fa-user-slash"></i>រកមិនឃើញបុគ្គលិកឈ្មោះ ID នេះ — កាតមិនត្រឹមត្រូវ</div>';
+    return;
+  }
+
+  const status = s.EmploymentStatus || 'កំពុងធ្វើការ';
+  const statusClass = status === 'បានឈប់' ? 'resigned' : status === 'បានព្យួរ' ? 'suspended' : 'active';
+  const photoUrl = s.Photo ? convertDriveUrl(s.Photo) : '';
+  const photoHtml = photoUrl
+    ? `<img src="${photoUrl}" class="photo" onerror="this.outerHTML='<div class=\\'photo-ph\\'><i class=\\'fas fa-user\\'></i></div>';">`
+    : `<div class="photo-ph"><i class="fas fa-user"></i></div>`;
+
+  content.innerHTML = `
+    <div class="status ${statusClass}">${status}</div><br>
+    ${photoHtml}
+    <div class="name">${s.Name || '-'}</div>
+    <div class="id">${s.ID}</div>
+    <div class="grid">
+      <div><span class="lbl">ភេទ</span><span class="val">${s.Sex || '-'}</span></div>
+      <div><span class="lbl">កាលបរិច្ឆេទចូលធ្វើការ</span><span class="val">${formatDateDisplay(s.StartingDate)}</span></div>
+      <div><span class="lbl">មុខតំណែង</span><span class="val">${s.Position || '-'}</span></div>
+      <div><span class="lbl">ផ្នែក</span><span class="val">${s.Department || '-'}</span></div>
+    </div>
+    <div class="verified"><i class="fas fa-circle-check"></i>ផ្ទៀងផ្ទាត់ជាមួយ Database ផ្ទាល់</div>
+    <div class="disclaimer">ព័ត៌មាននេះបង្ហាញស្ថានភាពបច្ចុប្បន្នរបស់បុគ្គលិក<br>មិនមែនរូបថតត្រឹមកាលបរិច្ឆេទចេញកាតដើមឡើយ</div>
+  `;
+})();
+</script>
+</body>
+</html>

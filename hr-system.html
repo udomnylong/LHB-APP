@@ -4591,11 +4591,14 @@ function printStaffCard() {
   const fmt = d => d.toLocaleDateString('km-KH', { year:'numeric', month:'2-digit', day:'2-digit' });
 
   // Render QR into a throwaway offscreen div so the print window doesn't need to load the QR library itself.
+  // QR encodes a link to verify-card.html, which looks the staff up live against the
+  // database when scanned — so scanning always reflects current status, not a snapshot.
+  const verifyUrl = `https://udomnylong.github.io/LHB-APP/verify-card.html?id=${encodeURIComponent(s.ID)}`;
   const qrHolder = document.createElement('div');
   qrHolder.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
   document.body.appendChild(qrHolder);
   new QRCode(qrHolder, {
-    text: `LHB|${s.ID}|${s.Name}`,
+    text: verifyUrl,
     width: 140, height: 140, colorDark: '#0f2540', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M,
   });
   setTimeout(() => {
