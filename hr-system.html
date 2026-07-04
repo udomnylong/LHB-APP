@@ -4587,7 +4587,7 @@ function printStaffCard() {
   const statusColor = status === 'បានឈប់' ? '#ef4444' : status === 'បានព្យួរ' ? '#f59e0b' : '#10b981';
 
   const issueDate = new Date();
-  const expiryDate = new Date(issueDate); expiryDate.setFullYear(expiryDate.getFullYear() + 2);
+  const expiryDate = new Date(issueDate); expiryDate.setMonth(expiryDate.getMonth() + 6);
   const fmt = d => d.toLocaleDateString('km-KH', { year:'numeric', month:'2-digit', day:'2-digit' });
 
   // Render QR into a throwaway offscreen div so the print window doesn't need to load the QR library itself.
@@ -4607,28 +4607,32 @@ function printStaffCard() {
          <div style="display:none;width:110px;height:110px;border-radius:12px;background:#eef2f7;align-items:center;justify-content:center;color:#94a3b8;font-size:40px;"><i class="fas fa-user"></i></div>`
       : `<div style="width:110px;height:110px;border-radius:12px;background:#eef2f7;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:40px;"><i class="fas fa-user"></i></div>`;
 
-    const w = window.open('', '_blank', 'width=480,height=720');
+    const w = window.open('', '_blank', 'width=460,height=700');
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
       <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700;800&display=swap" rel="stylesheet">
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
       <style>
         *{box-sizing:border-box;}
         body{font-family:'Kantumruy Pro',sans-serif;margin:0;padding:24px;background:#f1f5f9;display:flex;justify-content:center;}
-        .card{width:340px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.15);}
-        .card-header{background:linear-gradient(135deg,#0f2540 0%,#1a3c5e 100%);padding:18px 20px;text-align:center;}
-        .card-logo{font-size:28px;font-weight:900;color:#f59e0b;letter-spacing:6px;font-family:'Outfit',sans-serif;line-height:1;}
-        .card-company{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:4px;text-transform:uppercase;font-weight:700;}
-        .card-body{padding:20px;text-align:center;}
-        .card-status{display:inline-block;margin-bottom:14px;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${statusColor};}
-        .card-name{font-size:18px;font-weight:800;color:#0f2540;margin:10px 0 2px;}
-        .card-id{font-size:12px;color:#64748b;font-weight:600;margin-bottom:14px;}
-        .card-grid{text-align:left;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;padding:14px 4px;border-top:1px dashed #e2e8f0;border-bottom:1px dashed #e2e8f0;margin-bottom:16px;}
-        .card-grid .lbl{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;display:block;}
-        .card-grid .val{font-size:13px;color:#1e293b;font-weight:700;}
-        .card-qr{margin-top:4px;}
-        .card-qr img{width:100px;height:100px;}
-        .card-dates{display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:12px;padding:0 4px;}
-        @media print{body{background:#fff;padding:0;} .card{box-shadow:none;}}
+        .card{width:105mm;height:148mm;background:#fff;border-radius:4mm;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.15);display:flex;flex-direction:column;}
+        .card-header{background:linear-gradient(135deg,#0f2540 0%,#1a3c5e 100%);padding:5mm 4mm;text-align:center;}
+        .card-logo{font-size:22px;font-weight:900;color:#f59e0b;letter-spacing:5px;font-family:'Outfit',sans-serif;line-height:1;}
+        .card-company{color:rgba(255,255,255,.7);font-size:9px;letter-spacing:1.5px;margin-top:3px;text-transform:uppercase;font-weight:700;}
+        .card-body{padding:5mm 5mm 4mm;text-align:center;flex:1;display:flex;flex-direction:column;}
+        .card-status{display:inline-block;margin-bottom:3mm;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${statusColor};}
+        .card-name{font-size:16px;font-weight:800;color:#0f2540;margin:8px 0 2px;}
+        .card-id{font-size:11px;color:#64748b;font-weight:600;margin-bottom:3mm;}
+        .card-grid{text-align:left;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;padding:3mm 2px;border-top:1px dashed #e2e8f0;border-bottom:1px dashed #e2e8f0;margin-bottom:3mm;}
+        .card-grid .lbl{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;display:block;}
+        .card-grid .val{font-size:12px;color:#1e293b;font-weight:700;}
+        .card-qr{margin-top:auto;}
+        .card-qr img{width:80px;height:80px;}
+        .card-dates{display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;margin-top:3mm;padding:0 2px;}
+        @media print{
+          @page{size:105mm 148mm;margin:0;}
+          body{background:#fff;padding:0;}
+          .card{box-shadow:none;border-radius:0;width:105mm;height:148mm;}
+        }
       </style>
       </head><body>
         <div class="card">
