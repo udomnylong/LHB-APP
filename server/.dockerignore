@@ -1,0 +1,9 @@
+node_modules
+.env
+service-account-key.json
+*.json
+!package.json
+!package-lock.json
+scripts
+schema.sql
+README.md

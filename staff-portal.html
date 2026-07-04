@@ -945,6 +945,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<script src="assets/api-client.js"></script>
 <script>
 // ════════════════════════════════════════════════
 // CONFIG
@@ -988,15 +989,11 @@ async function doLogin() {
   btn.innerHTML = '<i class="fas fa-spinner spin"></i> កំពុង Login...';
 
   try {
-    // Fetch StaffInfo — no redirect constraint for iOS Safari
-    const fetchUrl = SU + '?sheet=StaffInfo&t=' + Date.now();
+    // Phase 2: StaffInfo now comes from Cloud Run/Cloud SQL, not Apps Script/Sheets.
     let j = null;
-
     try {
-      const r   = await fetchWithTimeout(fetchUrl, { method:'GET', cache:'no-store' }, 20000);
-      const txt = await r.text();
-      const clean = txt.trim();
-      j = JSON.parse(clean.startsWith('{') ? clean : clean.replace(/^[^{]*/,''));
+      j = await LhbApi.getStaff();
+      if (!j._ok) { showLoginErr('Data Load Failed — ' + (j.msg || 'ពិនិត្យ Internet')); return; }
     } catch(fe) {
       const msg = fe.name === 'AbortError' ? 'Timeout — Server មិនឆ្លើយតប (20s)' : 'Network Error — ' + fe.message;
       showLoginErr(msg); return;
@@ -1246,17 +1243,11 @@ async function loadTodayStatus(id, silent = false) {
     const today = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
     const kh    = now.toLocaleDateString('km-KH', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
 
-    // Fetch only today's rows for this staff — server filters by id+date (much faster)
-    const qSuffix = '&id=' + encodeURIComponent(id) + '&date=' + today + '&t=' + Date.now();
-    const [rCI, rCO] = await Promise.all([
-      fetchWithTimeout(SU + '?sheet=CheckIn'  + qSuffix, {redirect:'follow'}),
-      fetchWithTimeout(SU + '?sheet=CheckOut' + qSuffix, {redirect:'follow'}),
+    // Phase 2: CheckIn/CheckOut now come from Cloud Run/Cloud SQL, server-filtered by id+date.
+    const [jCI, jCO] = await Promise.all([
+      LhbApi.getCheckEventSheetRows('checkin',  { staffCode: id, date: today }),
+      LhbApi.getCheckEventSheetRows('checkout', { staffCode: id, date: today }),
     ]);
-    const parseJ = async r => {
-      const t = await r.text();
-      return JSON.parse(t.startsWith('{') ? t : t.replace(/^[^{]*/,''));
-    };
-    const [jCI, jCO] = await Promise.all([parseJ(rCI), parseJ(rCO)]);
 
     const matchRow = (data, sheetId) => (data||[]).find(x => {
       if (String(x.ID||'').trim() !== String(sheetId).trim()) return false;
@@ -1622,32 +1613,22 @@ async function doCheckSubmit() {
   const pad  = x => String(x).padStart(2, '0');
   const time = pad(n.getHours()) + ':' + pad(n.getMinutes());
   const date = n.getFullYear() + '-' + pad(n.getMonth()+1) + '-' + pad(n.getDate());
-  const dept = currentStaff.Department || currentStaff.Position || '';
-  const sn   = ci ? 'CheckIn' : 'CheckOut';
 
   const row = {
     ID: currentStaff.ID || '', Name: currentStaff.Name || '',
     Gmail: currentStaff.Gmail || '',
     ProjectName: _checkQD.project || '',
-    Date: date, Time: time, Timestamp: n.toISOString(),
-    Latitude: gps.lat, Longitude: gps.lng, Accuracy: gps.acc,
-    LateEarly: '', Minutes: '0',
-    Position: currentStaff.Position || '', Department: dept,
   };
 
   try {
-    await fetch(SU, { method:'POST', mode:'cors', headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({ action:'append', sheet:sn, data:row }) });
-    fetch(SU, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({
-        action:'upsert', sheet:'Attendance', type:_checkType,
-        keyValue:row.ID, keyDate:date,
-        data:{ ID:row.ID, Name:row.Name, Position:row.Position, Department:dept,
-               ProjectName:row.ProjectName, Date:date,
-               CheckIn:  ci ? time : '', CheckOut: ci ? '' : time,
-               Late:'', Early:'', Status:'Present' }
-      })
-    }).catch(()=>{});
+    // Phase 2: check-in/out + Attendance upsert now happen in one transactional API
+    // call server-side (replaces the old two-request append+upsert fire-and-forget pair
+    // that could silently leave Attendance out of sync with the CheckIn/CheckOut log).
+    const apiRes = await (ci ? LhbApi.checkIn : LhbApi.checkOut)({
+      staffCode: row.ID, projectName: row.ProjectName,
+      latitude: gps.lat, longitude: gps.lng, accuracy: gps.acc,
+    });
+    if (!apiRes._ok) throw new Error(apiRes.msg || 'Check-in/out failed');
 
     // Local history
     const hKey  = 'hr_h_' + date;

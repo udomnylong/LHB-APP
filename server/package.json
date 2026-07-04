@@ -5,11 +5,13 @@
   "description": "LHB HR System backend (Cloud Run) and Sheets-to-Postgres migration tooling",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "migrate:etl": "node scripts/migrate-sheets-to-sql.js",
     "db:schema": "node scripts/apply-schema.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
+    "express": "^4.19.2",
     "googleapis": "^140.0.1",
     "pg": "^8.12.0"
   }

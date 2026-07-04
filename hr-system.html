@@ -1223,6 +1223,7 @@ tbody tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<script src="assets/api-client.js"></script>
 <script>
 // ========== CONFIG ==========
 const SHEET_ID = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
@@ -1383,11 +1384,6 @@ function showLoginError(msg) {
   if (el) { el.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + (msg || 'Username ឬ Password មិនត្រឹមត្រូវ!'); el.style.display = 'block'; }
 }
 
-// ── Generate unique session token ──
-function generateToken() {
-  return 'tk_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
-}
-
 // ── Call Apps Script session actions via GET (avoids CORS preflight) ──
 async function fetchWithTimeout(url, options, ms) {
   const controller = new AbortController();
@@ -1396,19 +1392,6 @@ async function fetchWithTimeout(url, options, ms) {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
     clearTimeout(timer);
-  }
-}
-
-async function callSessionAction(action, payload) {
-  try {
-    const params = new URLSearchParams({ action });
-    Object.keys(payload||{}).forEach(k => params.append(k, payload[k]||''));
-    const url = APPS_SCRIPT_URL + '?' + params.toString() + '&t=' + Date.now();
-    const res = await fetchWithTimeout(url, { method: 'GET' }, 15000);
-    return await res.json();
-  } catch(e) {
-    console.warn('[Session] API error:', e);
-    return { status: 'error', active: false };
   }
 }
 
@@ -1434,60 +1417,40 @@ async function doLogin() {
 }
 
 async function doLoginInner(u, p, lBtn, resetBtn) {
-  // Load users from sheet
-  if (!appData.users || appData.users.length === 0) {
-    try {
-      const userData = await fetchSheet(SHEETS.user);
-      if (userData && userData.length > 0) appData.users = userData;
-    } catch(e) { console.warn('Users sheet load failed:', e); }
-  }
-
   document.getElementById('loginError').style.display = 'none';
+  lBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> កំពុង ចូល...';
 
-  // Match user from sheet
-  const sheetMatch = (appData.users||[]).find(x => {
-    const uCol = String(x.Username || x.username || x.User || x.user || '').trim();
-    const pCol = String(x.Password || x.password || x.Pass || x.pass || '').trim();
-    return uCol === u && pCol === p;
-  });
-  const match = sheetMatch || (u === 'admin' && p === '8285' ? {Username:'admin', Role:'admin', Name:'Administrator'} : null);
+  // ── Cloud Run auth (Phase 2) — login + concurrent-session check happen
+  // atomically server-side now, instead of the old two-step checkSession+setSession. ──
+  const apiResult = await LhbApi.login(u, p);
 
-  if (!match) {
+  let match, myToken;
+  if (apiResult._ok) {
+    match = { ...apiResult.user };
+    myToken = apiResult.token;
+  } else if (apiResult._httpStatus === 409) {
+    resetBtn();
+    const minAgo = Math.floor((Date.now() - new Date(apiResult.since || 0).getTime()) / 60000);
+    const timeStr = minAgo < 1 ? 'ប៉ុន្មានវិនាទីមុន' : minAgo + ' នាទីមុន';
+    showLoginError('User នេះបានចូលប្រើប្រាស់រួចហើយ (' + timeStr + ')! សូម Logout ពី Device ដែលកំពុងប្រើ ឬ ទំនាក់ទំនង Admin។');
+    console.warn('[Login] Concurrent session blocked for:', u);
+    return;
+  } else if (u === 'admin' && p === '8285') {
+    // Legacy client-only fallback (kept until Phase 5 auth hardening removes it —
+    // see migration plan). No API token in this mode: server-backed features
+    // (staff CRUD, check-in/out) will 401 until a real admin login succeeds.
+    match = { username: 'admin', role: 'admin', name: 'Administrator' };
+    myToken = null;
+  } else {
     resetBtn();
     showLoginError('Username ឬ Password មិនត្រឹមត្រូវ!');
     return;
   }
 
   // Normalize
-  match.username = match.Username || match.username || u;
-  match.role     = match.Role     || match.role     || 'user';
-  match.name     = match.Name     || match.name     || u;
-
-  // ── Generate new token for this login attempt ──
-  const myToken = generateToken();
-
-  // ── Check concurrent session (skip for admin) ──
-  const isAdmin = (match.role||'').toLowerCase() === 'admin';
-  if (!isAdmin) {
-    lBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> កំពុង ពិនិត្យ Session...';
-    const sessionCheck = await callSessionAction('checkSession', {
-      username: u.toLowerCase(),
-      myToken: ''  // empty = we haven't set our token yet
-    });
-    if (sessionCheck.active) {
-      resetBtn();
-      // Format how long ago
-      const minAgo = Math.floor((Date.now() - (sessionCheck.since||0)) / 60000);
-      const timeStr = minAgo < 1 ? 'ប៉ុន្មានវិនាទីមុន' : minAgo + ' នាទីមុន';
-      showLoginError('User នេះបានចូលប្រើប្រាស់រួចហើយ (' + timeStr + ')! សូម Logout ពី Device ដែលកំពុងប្រើ ឬ ទំនាក់ទំនង Admin។');
-      console.warn('[Login] Concurrent session blocked for:', u);
-      return;
-    }
-  }
-
-  // ── Register session token in Google Sheet ──
-  lBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> កំពុង ចូល...';
-  await callSessionAction('setSession', { username: u.toLowerCase(), token: myToken });
+  match.username = match.username || u;
+  match.role     = match.role     || 'user';
+  match.name     = match.name     || u;
 
   // ── Device fingerprint ──
   const fp = getDeviceFingerprint();
@@ -1527,34 +1490,14 @@ function startSessionHeartbeat() {
   // If browser closes without logout, session auto-expires after 10 min (2 missed heartbeats)
   _heartbeatInterval = setInterval(async () => {
     if (!currentUser || !currentUser.sessionToken) return;
-    try {
-      await callSessionAction('setSession', {
-        username: (currentUser.username||'').toLowerCase(),
-        token: currentUser.sessionToken
-      });
-    } catch(e) { console.warn('[Heartbeat] failed:', e); }
+    try { await LhbApi.getSession(); } catch(e) { console.warn('[Heartbeat] failed:', e); }
   }, 5 * 60 * 1000); // every 5 min
 }
 
-// ── Send clearSession via sendBeacon (works on tab/browser close) ──
+// ── Best-effort logout on tab/browser close (keepalive fetch, no response awaited) ──
 function clearSessionBeacon() {
   if (!currentUser || !currentUser.sessionToken) return;
-  const url = APPS_SCRIPT_URL +
-    '?action=clearSession' +
-    '&username=' + encodeURIComponent((currentUser.username||'').toLowerCase()) +
-    '&token='    + encodeURIComponent(currentUser.sessionToken);
-  // sendBeacon: browser guarantees delivery even on page close
-  if (navigator.sendBeacon) {
-    navigator.sendBeacon(url);
-    console.log('[Session] Beacon sent on unload');
-  } else {
-    // Fallback: synchronous XHR (older browsers)
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('GET', url, false); // false = synchronous
-      xhr.send();
-    } catch(e) {}
-  }
+  LhbApi.logoutBeacon();
 }
 
 // ── Register beforeunload: clear session when browser/tab closes ──
@@ -1594,35 +1537,23 @@ function registerUnloadHandler() {
 async function revalidateSession() {
   if (!currentUser || !currentUser.sessionToken) return;
   try {
-    const res = await callSessionAction('checkSession', {
-      username: (currentUser.username||'').toLowerCase(),
-      myToken: currentUser.sessionToken
-    });
-    // If another session took over → force logout
-    if (res.active) {
-      console.warn('[Session] Another session detected after revalidation — logging out');
+    const res = await LhbApi.getSession();
+    // requireAuth on the server rejects revoked/expired tokens (e.g. an admin
+    // reset the device, or another login took over) → force logout locally.
+    if (!res._ok) {
+      console.warn('[Session] Token no longer valid after revalidation — logging out');
       sessionStorage.removeItem('hrSession');
       if (_heartbeatInterval) clearInterval(_heartbeatInterval);
       showToast('⚠️ Session ត្រូវបានផុតកំណត់ — សូម Login ម្ដងទៀត', 'warning');
       setTimeout(() => location.reload(), 2000);
-    } else {
-      // Refresh our session token
-      await callSessionAction('setSession', {
-        username: (currentUser.username||'').toLowerCase(),
-        token: currentUser.sessionToken
-      });
     }
   } catch(e) { console.warn('[Revalidate] failed:', e); }
 }
 
 async function doLogout() {
   if (_heartbeatInterval) clearInterval(_heartbeatInterval);
-  // Clear session in Google Sheet
   if (currentUser && currentUser.sessionToken) {
-    await callSessionAction('clearSession', {
-      username: (currentUser.username||'').toLowerCase(),
-      token: currentUser.sessionToken
-    });
+    try { await LhbApi.logout(); } catch(e) {}
   }
   sessionStorage.removeItem('hrSession');
   currentUser = null;
@@ -1696,6 +1627,31 @@ const SHEET_HEADERS = {
 };
 
 async function fetchSheet(sheetName) {
+  // Phase 2: StaffInfo/User are served from Cloud Run now, not Apps Script/Sheets.
+  if (sheetName === 'StaffInfo') {
+    const r = await LhbApi.getStaff();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getStaff failed:', r.msg);
+    return [];
+  }
+  if (sheetName === 'User') {
+    const r = await LhbApi.getUsers();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getUsers failed:', r.msg);
+    return [];
+  }
+  if (sheetName === 'Attendance') {
+    const r = await LhbApi.getAttendanceSheetRows();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getAttendanceSheetRows failed:', r.msg);
+    return [];
+  }
+  if (sheetName === 'CheckIn' || sheetName === 'CheckOut') {
+    const r = await LhbApi.getCheckEventSheetRows(sheetName === 'CheckIn' ? 'checkin' : 'checkout');
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getCheckEventSheetRows failed:', r.msg);
+    return [];
+  }
   // Method 1: Apps Script doGet (primary - handles CORS properly)
   try {
     const url = APPS_SCRIPT_URL + '?action=read&sheet=' + encodeURIComponent(sheetName) + '&t=' + Date.now();
@@ -1743,6 +1699,11 @@ async function fetchSheet(sheetName) {
 
 async function writeToSheet(sheetName, rowData, action) {
   action = action || 'append';
+  if (sheetName === 'StaffInfo' && action === 'append') {
+    const r = await LhbApi.createStaff(rowData);
+    if (!r._ok) console.warn('[LhbApi] createStaff failed:', r.msg);
+    return r._ok;
+  }
   if (!APPS_SCRIPT_URL) { showToast('⚠️ Apps Script URL មិនទាន់កំណត់', 'warning'); return false; }
   const hdrs = SHEET_HEADERS[sheetName] || Object.keys(rowData);
   const rowArr = hdrs.map(h => (rowData[h] !== undefined && rowData[h] !== null) ? String(rowData[h]) : '');
@@ -1759,6 +1720,11 @@ async function writeToSheet(sheetName, rowData, action) {
 
 // Delete from sheet by row key
 async function deleteFromSheet(sheetName, keyField, keyValue) {
+  if (sheetName === 'StaffInfo') {
+    const r = await LhbApi.deleteStaff(keyValue);
+    if (!r._ok) console.warn('[LhbApi] deleteStaff failed:', r.msg);
+    return r._ok;
+  }
   if (!APPS_SCRIPT_URL) return false;
   const payload = { action: 'delete', sheet: sheetName, keyField, keyValue: String(keyValue) };
   try {
@@ -1773,6 +1739,11 @@ async function deleteFromSheet(sheetName, keyField, keyValue) {
 
 // Update a row in sheet
 async function updateInSheet(sheetName, keyField, keyValue, rowData, keyDate) {
+  if (sheetName === 'StaffInfo') {
+    const r = await LhbApi.updateStaff(keyValue, rowData);
+    if (!r._ok) console.warn('[LhbApi] updateStaff failed:', r.msg);
+    return r._ok;
+  }
   if (!APPS_SCRIPT_URL) return false;
   const hdrs = SHEET_HEADERS[sheetName] || Object.keys(rowData);
   const rowArr = hdrs.map(h => (rowData[h] !== undefined && rowData[h] !== null) ? String(rowData[h]) : '');
