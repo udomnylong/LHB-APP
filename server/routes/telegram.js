@@ -38,30 +38,32 @@ async function getRegisteredInfo(chatId) {
 }
 
 // POST /api/telegram/webhook
+// Processing is awaited fully before responding — Cloud Run only guarantees CPU
+// while a request is in flight, so acking Telegram before finishing (the old
+// "fire-and-forget" pattern) risked the container freezing before the reply
+// message actually went out.
 router.post('/webhook', asyncHandler(async (req, res) => {
-  res.json({ ok: true }); // ack immediately, Telegram doesn't need to wait on our processing
-
   const body = req.body || {};
-  if (body.update_id != null && alreadySeen(String(body.update_id))) return;
+  if (body.update_id != null && alreadySeen(String(body.update_id))) return res.json({ ok: true });
 
   const msg = body.message || body.edited_message;
-  if (!msg) return;
-  if (Math.floor(Date.now() / 1000) - (msg.date || 0) > 30) return; // ignore stale updates
+  if (!msg) return res.json({ ok: true });
+  if (Math.floor(Date.now() / 1000) - (msg.date || 0) > 30) return res.json({ ok: true }); // ignore stale updates
 
   const chatId = String(msg.chat.id);
   const text = (msg.text || '').trim();
 
   if (text === '/start') {
-    return sendTelegramMessage(chatId, 'LHB HR Bot!\n\nRegister:\n/register 0XXXXXXXXX');
-  }
-  if (text.startsWith('/register')) {
+    await sendTelegramMessage(chatId, 'LHB HR Bot!\n\nRegister:\n/register 0XXXXXXXXX');
+  } else if (text.startsWith('/register')) {
     const phone = text.replace('/register', '').trim().replace(/[^0-9]/g, '');
-    if (!phone || phone.length < 8) return sendTelegramMessage(chatId, 'Format: /register 0XXXXXXXXX');
-    return sendTelegramMessage(chatId, await registerStaff(phone, chatId));
+    if (!phone || phone.length < 8) await sendTelegramMessage(chatId, 'Format: /register 0XXXXXXXXX');
+    else await sendTelegramMessage(chatId, await registerStaff(phone, chatId));
+  } else if (text === '/status') {
+    await sendTelegramMessage(chatId, (await getRegisteredInfo(chatId)) || 'Not registered.');
   }
-  if (text === '/status') {
-    return sendTelegramMessage(chatId, (await getRegisteredInfo(chatId)) || 'Not registered.');
-  }
+
+  res.json({ ok: true });
 }));
 
 module.exports = router;

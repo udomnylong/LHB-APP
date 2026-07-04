@@ -83,7 +83,10 @@ async function recordEvent({ table, staffCode, req, res }) {
   const emoji = table === 'check_ins' ? '🟢' : '🟡';
   const label = table === 'check_ins' ? 'CHECK IN' : 'CHECK OUT';
   if (TELEGRAM_GROUP) {
-    sendTelegramMessage(TELEGRAM_GROUP,
+    // Awaited on purpose — Cloud Run only guarantees CPU while a request is in
+    // flight, so a fire-and-forget call here could get frozen mid-flight before
+    // the outbound request to Telegram's API actually completes.
+    await sendTelegramMessage(TELEGRAM_GROUP,
       `${emoji} ${label} | ${eventTime}\n\n${staff.name || ''}  ${staff.staff_code}\n${staff.position || ''} | ${staff.department || ''}\n${projectName}`
     );
   }
