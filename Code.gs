@@ -98,7 +98,7 @@ function enforceAttendanceTime_(p) {
   var total  = sH * 60 + sMn;
 
   var row    = p.data || {};
-  row.Date   = sDate;
+  row.Date   = "'" + sDate;   // leading "'" forces plain text — see enforceServerTime_
   p.keyDate  = sDate; // fix search key so upsert finds correct server-date row
 
   var clientCheckIn  = String(row.CheckIn  || '');
@@ -114,7 +114,7 @@ function enforceAttendanceTime_(p) {
     + ' | serverTime:'     + sTime);
 
   if (p.type === 'checkin') {
-    row.CheckIn = sTime;
+    row.CheckIn = "'" + sTime;
     var cutoff = CHECKIN_LATE_H * 60 + CHECKIN_LATE_M;
     if (total > cutoff) {
       var lateMin = total - cutoff;
@@ -125,7 +125,7 @@ function enforceAttendanceTime_(p) {
       row.Status = 'Present';
     }
   } else if (p.type === 'checkout') {
-    row.CheckOut = sTime;
+    row.CheckOut = "'" + sTime;
     var endCutoff = CHECKOUT_EARLY_H * 60 + CHECKOUT_EARLY_M;
     if (total < endCutoff) {
       row.Early = 'Early ' + (endCutoff - total) + ' min';
@@ -162,8 +162,12 @@ function enforceServerTime_(row, sheet) {
   }
 
   // ── Replace client values with verified server values ──
-  row['Time']      = sTime;
-  row['Date']      = sDate;
+  // Leading "'" forces Sheets to store these as plain text instead of
+  // auto-converting to Date/Time cells — Apps Script reconstructs auto-converted
+  // Date cells using the project's configured timezone, which can silently drift
+  // from the fixed UTC+7 math above and make times read back wrong (see doGet).
+  row['Time']      = "'" + sTime;
+  row['Date']      = "'" + sDate;
   row['Timestamp'] = sTs;
 
   // ── Recalculate LateEarly / Minutes from server time ──
@@ -835,7 +839,8 @@ function sendCheckNotification(sheet, row) {
   try {
     if(sheet!=='CheckIn'&&sheet!=='CheckOut')return;
     // Use the enforced server time already stored in row.Time; fallback to now
-    var serverTime = (row['Time'] || '').substring(0, 5) || phTimeStr(new Date());
+    // (strip the leading "'" that forces the Sheets cell to stay plain text)
+    var serverTime = String(row['Time'] || '').replace(/^'/, '').substring(0, 5) || phTimeStr(new Date());
     var emoji=sheet==='CheckIn'?'🟢':'🟡', type=sheet==='CheckIn'?'CHECK IN':'CHECK OUT';
     var msg=emoji+' '+type+' | '+serverTime+'\n\n'+(row.Name||'')+'  '+(row.ID||'')+'\n'+(row.Position||'')+' | '+(row.Department||'')+'\n'+(row.ProjectName||'');
     var target=TELEGRAM_GROUP||TELEGRAM_CHAT;
