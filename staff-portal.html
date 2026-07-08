@@ -1170,7 +1170,10 @@ function initApp(staff) {
   // Leave balance + today status + projects
   loadLeaveBalance(id);
   loadTodayStatus(id);
-  loadProjects(); // Load GPS fence data
+  loadProjects(); // Load GPS fence data (async — see below, does not block GPS start)
+  startGPSDetection(); // ✅ Start GPS watch immediately, independent of project fetch —
+                        // on slow/flaky mobile networks the project fetch can time out,
+                        // which used to leave the GPS status card permanently hidden.
   startAutoSync(); // Auto sync every 30s
 
   // Show app
@@ -1692,18 +1695,21 @@ function getStaffProject() {
 }
 
 // Load project data for GPS fence
-async function loadProjects() {
+// Retries on failure — Apps Script cold-starts / flaky mobile networks would
+// otherwise permanently strand GPS project-fence detection with no project data.
+async function loadProjects(attempt) {
+  attempt = attempt || 1;
   try {
     const r = await fetchWithTimeout(SU + '?sheet=Project&t=' + Date.now(), {redirect:'follow'});
     const txt = await r.text();
     const j = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
-    if (j.data && j.data.length) {
-      _projectCache = j.data;
-      console.log('[GPS] Loaded', j.data.length, 'projects');
-      // Start GPS detection after projects loaded
-      startGPSDetection();
-    }
-  } catch(e) { console.warn('[GPS] loadProjects error:', e); }
+    if (!j.data || !j.data.length) throw new Error('empty project data');
+    _projectCache = j.data;
+    console.log('[GPS] Loaded', j.data.length, 'projects');
+  } catch(e) {
+    console.warn('[GPS] loadProjects error (attempt ' + attempt + '):', e);
+    if (attempt < 3) setTimeout(() => loadProjects(attempt + 1), 4000);
+  }
 }
 
 // ══ GPS Project Detection ══
@@ -2146,26 +2152,20 @@ async function loadHistory(force) {
   if (!list || !currentStaff) return;
   list.innerHTML = '<div class="hist-load"><i class="fas fa-circle-notch spin"></i> កំពុងទាញទិន្នន័យ...</div>';
 
-  // Parse JSON response from Apps Script (handle JSONP prefix)
-  async function fetchSheet(name) {
-    try {
-      const r   = await fetch(SU + '?sheet=' + name + '&t=' + Date.now(), {redirect:'follow'});
-      const txt = await r.text();
-      const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
-      return j.data || [];
-    } catch(e) { console.warn('[History] fetchSheet', name, e); return []; }
-  }
-
   try {
     const id  = String(currentStaff.ID||'').trim();
     const now = new Date();
     const cut = new Date(now); cut.setDate(cut.getDate()-30);
+    const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const from = fmt(cut), to = fmt(now);
 
-    // ── Fetch CheckIn + CheckOut sheets in parallel ──
-    const [inRows, outRows] = await Promise.all([
-      fetchSheet('CheckIn'),
-      fetchSheet('CheckOut')
+    // ── Fetch CheckIn + CheckOut events from Cloud SQL (live) in parallel ──
+    const [jCI, jCO] = await Promise.all([
+      LhbApi.getCheckEventSheetRows('checkin',  { staffCode: id, from, to }),
+      LhbApi.getCheckEventSheetRows('checkout', { staffCode: id, from, to }),
     ]);
+    const inRows  = jCI.data || [];
+    const outRows = jCO.data || [];
 
     // Filter helper: only this staff, last 30 days, valid date
     function filterRows(rows) {
