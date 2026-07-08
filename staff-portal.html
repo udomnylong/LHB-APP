@@ -1195,11 +1195,10 @@ function initApp(staff) {
 // ════════════════════════════════════════════════
 async function loadLeaveBalance(id) {
   try {
-    const r   = await fetchWithTimeout(SU + '?sheet=StaffLeave&t=' + Date.now(), {redirect:'follow'});
-    const txt = await r.text();
-    const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
+    const r = await LhbApi.getLeave();
+    if (!r._ok) throw new Error(r.msg || 'getLeave failed');
     const year = new Date().getFullYear();
-    const used = (j.data||[]).filter(l =>
+    const used = (r.data||[]).filter(l =>
       String(l.ID||'').trim() === String(id).trim() &&
       String(l.StartDate||'').startsWith(year) &&
       (l.Status||'').trim() !== 'Rejected'
@@ -1700,12 +1699,10 @@ function getStaffProject() {
 async function loadProjects(attempt) {
   attempt = attempt || 1;
   try {
-    const r = await fetchWithTimeout(SU + '?sheet=Project&t=' + Date.now(), {redirect:'follow'});
-    const txt = await r.text();
-    const j = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
-    if (!j.data || !j.data.length) throw new Error('empty project data');
-    _projectCache = j.data;
-    console.log('[GPS] Loaded', j.data.length, 'projects');
+    const r = await LhbApi.getProjects();
+    if (!r._ok || !r.data || !r.data.length) throw new Error(r.msg || 'empty project data');
+    _projectCache = r.data;
+    console.log('[GPS] Loaded', r.data.length, 'projects');
   } catch(e) {
     console.warn('[GPS] loadProjects error (attempt ' + attempt + '):', e);
     if (attempt < 3) setTimeout(() => loadProjects(attempt + 1), 4000);

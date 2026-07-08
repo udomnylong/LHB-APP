@@ -1,11 +1,12 @@
-// Backup: pushes current Cloud SQL data for the 5 migrated resources
-// (User, StaffInfo, CheckIn, CheckOut, Attendance) back into the Google Sheet as a
-// snapshot — the reverse direction of migrate-sheets-to-sql.js's Phase 1 ETL.
+// Backup: pushes current Cloud SQL data for the 8 migrated resources
+// (User, StaffInfo, CheckIn, CheckOut, Attendance, StaffLeave, StaffOT, Project) back
+// into the Google Sheet as a snapshot — the reverse direction of
+// migrate-sheets-to-sql.js's Phase 1 ETL.
 //
-// Deliberately scoped to only these 5 tabs: the other 7 sheets (StaffLeave, Project,
-// StaffOT, Food, WorkPlace, Comment, EvaluateStaff) are still edited directly in the
-// Sheet via Apps Script and are the source of truth for those — overwriting them from
-// Cloud SQL would clobber live edits with a stale Phase-1 snapshot.
+// Deliberately scoped to only these 8 tabs: the remaining 4 sheets (Food, WorkPlace,
+// Comment, EvaluateStaff) are still edited directly in the Sheet via Apps Script and
+// are the source of truth for those — overwriting them from Cloud SQL would clobber
+// live edits with a stale snapshot.
 
 const { google } = require('googleapis');
 const { pool } = require('./db');
@@ -102,6 +103,41 @@ async function backupCheckEvents(sheets, sheetId, table, sheetName) {
   return writeSheet(sheets, sheetId, sheetName, headers, mapped);
 }
 
+async function backupLeave(sheets, sheetId) {
+  const { rows } = await pool.query(`
+    SELECT l.*, s.name FROM staff_leave l LEFT JOIN staff s ON s.staff_code = l.staff_code
+    ORDER BY l.start_date, l.id`);
+  const mapped = rows.map((r) => ({
+    ID: r.staff_code, Name: r.name, TypeOfLeave: r.type_of_leave,
+    StartDate: fmtDate(r.start_date), EndDate: fmtDate(r.end_date),
+    Days: r.days, Reason: r.reason, Status: r.status,
+  }));
+  const headers = ['ID', 'Name', 'TypeOfLeave', 'StartDate', 'EndDate', 'Days', 'Reason', 'Status'];
+  return writeSheet(sheets, sheetId, 'StaffLeave', headers, mapped);
+}
+
+async function backupOT(sheets, sheetId) {
+  const { rows } = await pool.query(`
+    SELECT o.*, s.name FROM staff_ot o LEFT JOIN staff s ON s.staff_code = o.staff_code
+    ORDER BY o.date, o.id`);
+  const mapped = rows.map((r) => ({
+    ID: r.staff_code, Name: r.name, Date: fmtDate(r.date), Hours: r.hours,
+    TypeOfWork: r.type_of_work, Status: r.status, Remark: r.remark,
+  }));
+  const headers = ['ID', 'Name', 'Date', 'Hours', 'TypeOfWork', 'Status', 'Remark'];
+  return writeSheet(sheets, sheetId, 'StaffOT', headers, mapped);
+}
+
+async function backupProjects(sheets, sheetId) {
+  const { rows } = await pool.query('SELECT * FROM projects ORDER BY project_id');
+  const mapped = rows.map((r) => ({
+    ProjectID: r.project_id, ProjectName: r.project_name, Location: r.location,
+    Latitude: r.latitude, Longitude: r.longitude, Radius: r.radius, Status: r.status,
+  }));
+  const headers = ['ProjectID', 'ProjectName', 'Location', 'Latitude', 'Longitude', 'Radius', 'Status'];
+  return writeSheet(sheets, sheetId, 'Project', headers, mapped);
+}
+
 async function runBackup() {
   const sheetId = process.env.SHEET_ID;
   const sheets = await getSheetsClient();
@@ -110,7 +146,10 @@ async function runBackup() {
   const attendance = await backupAttendance(sheets, sheetId);
   const checkIns = await backupCheckEvents(sheets, sheetId, 'check_ins', 'CheckIn');
   const checkOuts = await backupCheckEvents(sheets, sheetId, 'check_outs', 'CheckOut');
-  return { users, staff, attendance, checkIns, checkOuts };
+  const leave = await backupLeave(sheets, sheetId);
+  const ot = await backupOT(sheets, sheetId);
+  const projects = await backupProjects(sheets, sheetId);
+  return { users, staff, attendance, checkIns, checkOuts, leave, ot, projects };
 }
 
 module.exports = { runBackup };

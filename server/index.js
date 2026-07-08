@@ -12,6 +12,9 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/staff', require('./routes/staff'));
 app.use('/api', require('./routes/attendance')); // exposes /api/checkins, /api/checkouts, /api/attendance
+app.use('/api/leave', require('./routes/leave'));
+app.use('/api/ot', require('./routes/ot'));
+app.use('/api/projects', require('./routes/projects'));
 app.use('/api/telegram', require('./routes/telegram'));
 app.use('/api/admin', require('./routes/admin'));
 

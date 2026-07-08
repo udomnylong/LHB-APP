@@ -25,8 +25,8 @@ router.post('/sync-checkevents', requireCronSecret, asyncHandler(async (req, res
 }));
 
 // POST /api/admin/backup-to-sheets — HR-admin-triggered (real login token required).
-// Pushes current Cloud SQL data for the 5 migrated resources back into the Sheet as
-// a backup snapshot. See backupToSheets.js for why it's scoped to just those 5.
+// Pushes current Cloud SQL data for the 8 migrated resources back into the Sheet as
+// a backup snapshot. See backupToSheets.js for why it's scoped to just those 8.
 router.post('/backup-to-sheets', requireAuth, asyncHandler(async (req, res) => {
   const result = await runBackup();
   console.log('[backup-to-sheets]', JSON.stringify(result));

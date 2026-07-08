@@ -1,7 +1,8 @@
 // Shared Cloud Run API client for hr-system.html / staff-portal.html.
-// Phase 2 of the Sheets -> Cloud SQL migration: only auth, staff, and
-// check-in/out+attendance are migrated here. Everything else still goes
-// through the Apps Script URL each HTML file already has.
+// Phases 2-3 of the Sheets -> Cloud SQL migration: auth, staff, check-in/out
+// +attendance, and now Leave/OT/Project (see LhbApi.MIGRATED_SHEETS). The
+// remaining sheets (Food, WorkPlace, Comment, EvaluateStaff) still go through
+// the Apps Script URL each HTML file already has.
 //
 // Override with window.LHB_API_BASE (set via a <script> tag before this file
 // loads) for local dev/testing against a different backend.
@@ -65,10 +66,45 @@
     return out;
   }
 
+  // ── StaffLeave / StaffOT / Project sheet-header <-> API snake_case field mapping ──
+  // Same purpose as STAFF_FIELD_MAP. Leave/OT also carry a RecordId (the real numeric
+  // Postgres PK) so callers can key edit/delete on it instead of the old ID+Date /
+  // ID-only composite matching (ID here is the *staff* ID, not a unique row ID).
+  const LEAVE_FIELD_MAP = {
+    ID: 'staff_code', TypeOfLeave: 'type_of_leave', StartDate: 'start_date',
+    EndDate: 'end_date', Days: 'days', Reason: 'reason', Status: 'status',
+  };
+  const OT_FIELD_MAP = {
+    ID: 'staff_code', Date: 'date', Hours: 'hours', TypeOfWork: 'type_of_work',
+    Status: 'status', Remark: 'remark',
+  };
+  const PROJECT_FIELD_MAP = {
+    ProjectID: 'project_id', ProjectName: 'project_name', Location: 'location',
+    Latitude: 'latitude', Longitude: 'longitude', Radius: 'radius', Status: 'status',
+  };
+
+  function mapRowToApi(fieldMap, row) {
+    const out = {};
+    Object.keys(fieldMap).forEach((sheetKey) => {
+      if (row[sheetKey] !== undefined) out[fieldMap[sheetKey]] = row[sheetKey] === '' ? null : row[sheetKey];
+    });
+    return out;
+  }
+  function mapApiToRow(fieldMap, apiRow, extra) {
+    const out = {};
+    Object.keys(fieldMap).forEach((sheetKey) => {
+      const v = apiRow[fieldMap[sheetKey]];
+      out[sheetKey] = v === null || v === undefined ? '' : String(v);
+    });
+    if (apiRow.staff_name !== undefined) out.Name = apiRow.staff_name || '';
+    if (extra) Object.assign(out, extra);
+    return out;
+  }
+
   const LhbApi = {
     // Resources fully migrated off Apps Script as of Phase 2 — callers use this
     // to decide whether to route a given sheet name through LhbApi or the old URL.
-    MIGRATED_SHEETS: ['User', 'StaffInfo', 'CheckIn', 'CheckOut', 'Attendance'],
+    MIGRATED_SHEETS: ['User', 'StaffInfo', 'CheckIn', 'CheckOut', 'Attendance', 'StaffLeave', 'StaffOT', 'Project'],
 
     // ── Auth ──
     async login(username, password) {
@@ -98,7 +134,7 @@
     hasToken() { return !!getToken(); },
     clearToken() { setToken(null); },
 
-    // ── Admin: back up Cloud SQL data for the 5 migrated resources into the Sheet ──
+    // ── Admin: back up Cloud SQL data for the 8 migrated resources into the Sheet ──
     async backupToSheets() {
       return apiFetch('/api/admin/backup-to-sheets', { method: 'POST', timeoutMs: 60000 });
     },
@@ -135,6 +171,56 @@
       return apiFetch('/api/staff/' + encodeURIComponent(staffCode) + '/photo', {
         method: 'PUT', body: JSON.stringify({ photoUrl }),
       });
+    },
+
+    // ── Leave (sheet-shaped in/out, see LEAVE_FIELD_MAP) ──
+    async getLeave(params) {
+      const qs = new URLSearchParams(params || {}).toString();
+      const r = await apiFetch('/api/leave' + (qs ? '?' + qs : ''), { method: 'GET' });
+      if (r._ok && Array.isArray(r.data)) r.data = r.data.map((row) => mapApiToRow(LEAVE_FIELD_MAP, row, { RecordId: String(row.id) }));
+      return r;
+    },
+    async createLeave(sheetRow) {
+      return apiFetch('/api/leave', { method: 'POST', body: JSON.stringify(mapRowToApi(LEAVE_FIELD_MAP, sheetRow)) });
+    },
+    async updateLeave(recordId, sheetRow) {
+      return apiFetch('/api/leave/' + encodeURIComponent(recordId), { method: 'PUT', body: JSON.stringify(mapRowToApi(LEAVE_FIELD_MAP, sheetRow)) });
+    },
+    async deleteLeave(recordId) {
+      return apiFetch('/api/leave/' + encodeURIComponent(recordId), { method: 'DELETE' });
+    },
+
+    // ── OT (sheet-shaped in/out, see OT_FIELD_MAP) ──
+    async getOT(params) {
+      const qs = new URLSearchParams(params || {}).toString();
+      const r = await apiFetch('/api/ot' + (qs ? '?' + qs : ''), { method: 'GET' });
+      if (r._ok && Array.isArray(r.data)) r.data = r.data.map((row) => mapApiToRow(OT_FIELD_MAP, row, { RecordId: String(row.id) }));
+      return r;
+    },
+    async createOT(sheetRow) {
+      return apiFetch('/api/ot', { method: 'POST', body: JSON.stringify(mapRowToApi(OT_FIELD_MAP, sheetRow)) });
+    },
+    async updateOT(recordId, sheetRow) {
+      return apiFetch('/api/ot/' + encodeURIComponent(recordId), { method: 'PUT', body: JSON.stringify(mapRowToApi(OT_FIELD_MAP, sheetRow)) });
+    },
+    async deleteOT(recordId) {
+      return apiFetch('/api/ot/' + encodeURIComponent(recordId), { method: 'DELETE' });
+    },
+
+    // ── Projects (sheet-shaped in/out, see PROJECT_FIELD_MAP; project_id is the natural key) ──
+    async getProjects() {
+      const r = await apiFetch('/api/projects', { method: 'GET' });
+      if (r._ok && Array.isArray(r.data)) r.data = r.data.map((row) => mapApiToRow(PROJECT_FIELD_MAP, row));
+      return r;
+    },
+    async createProject(sheetRow) {
+      return apiFetch('/api/projects', { method: 'POST', body: JSON.stringify(mapRowToApi(PROJECT_FIELD_MAP, sheetRow)) });
+    },
+    async updateProject(projectId, sheetRow) {
+      return apiFetch('/api/projects/' + encodeURIComponent(projectId), { method: 'PUT', body: JSON.stringify(mapRowToApi(PROJECT_FIELD_MAP, sheetRow)) });
+    },
+    async deleteProject(projectId) {
+      return apiFetch('/api/projects/' + encodeURIComponent(projectId), { method: 'DELETE' });
     },
 
     // ── Attendance (real-time check-in/out; NOT for manual/backfill admin edits —

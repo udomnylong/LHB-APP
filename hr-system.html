@@ -1661,6 +1661,24 @@ async function fetchSheet(sheetName) {
     console.warn('[HR] LhbApi.getCheckEventSheetRows failed:', r.msg);
     return [];
   }
+  if (sheetName === 'StaffLeave') {
+    const r = await LhbApi.getLeave();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getLeave failed:', r.msg);
+    return [];
+  }
+  if (sheetName === 'StaffOT') {
+    const r = await LhbApi.getOT();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getOT failed:', r.msg);
+    return [];
+  }
+  if (sheetName === 'Project') {
+    const r = await LhbApi.getProjects();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getProjects failed:', r.msg);
+    return [];
+  }
   // Method 1: Apps Script doGet (primary - handles CORS properly)
   try {
     const url = APPS_SCRIPT_URL + '?action=read&sheet=' + encodeURIComponent(sheetName) + '&t=' + Date.now();
@@ -1713,6 +1731,21 @@ async function writeToSheet(sheetName, rowData, action) {
     if (!r._ok) console.warn('[LhbApi] createStaff failed:', r.msg);
     return r._ok;
   }
+  if (sheetName === 'StaffLeave' && action === 'append') {
+    const r = await LhbApi.createLeave(rowData);
+    if (!r._ok) console.warn('[LhbApi] createLeave failed:', r.msg);
+    return r._ok;
+  }
+  if (sheetName === 'StaffOT' && action === 'append') {
+    const r = await LhbApi.createOT(rowData);
+    if (!r._ok) console.warn('[LhbApi] createOT failed:', r.msg);
+    return r._ok;
+  }
+  if (sheetName === 'Project' && action === 'append') {
+    const r = await LhbApi.createProject(rowData);
+    if (!r._ok) console.warn('[LhbApi] createProject failed:', r.msg);
+    return r._ok;
+  }
   if (!APPS_SCRIPT_URL) { showToast('⚠️ Apps Script URL មិនទាន់កំណត់', 'warning'); return false; }
   const hdrs = SHEET_HEADERS[sheetName] || Object.keys(rowData);
   const rowArr = hdrs.map(h => (rowData[h] !== undefined && rowData[h] !== null) ? String(rowData[h]) : '');
@@ -1738,6 +1771,23 @@ async function deleteFromSheet(sheetName, keyField, keyValue) {
     if (!r._ok) console.warn('[LhbApi] deleteStaff failed:', r.msg);
     return r._ok;
   }
+  // keyValue here is the record's real numeric id (RecordId), not the staff ID —
+  // see LEAVE_FIELD_MAP/OT_FIELD_MAP in assets/api-client.js.
+  if (sheetName === 'StaffLeave') {
+    const r = await LhbApi.deleteLeave(keyValue);
+    if (!r._ok) console.warn('[LhbApi] deleteLeave failed:', r.msg);
+    return r._ok;
+  }
+  if (sheetName === 'StaffOT') {
+    const r = await LhbApi.deleteOT(keyValue);
+    if (!r._ok) console.warn('[LhbApi] deleteOT failed:', r.msg);
+    return r._ok;
+  }
+  if (sheetName === 'Project') {
+    const r = await LhbApi.deleteProject(keyValue);
+    if (!r._ok) console.warn('[LhbApi] deleteProject failed:', r.msg);
+    return r._ok;
+  }
   if (!APPS_SCRIPT_URL) return false;
   const payload = { action: 'delete', sheet: sheetName, keyField, keyValue: String(keyValue) };
   try {
@@ -1757,6 +1807,24 @@ async function updateInSheet(sheetName, keyField, keyValue, rowData, keyDate) {
   if (sheetName === 'StaffInfo') {
     const r = await LhbApi.updateStaff(keyValue, rowData);
     if (!r._ok) console.warn('[LhbApi] updateStaff failed:', r.msg);
+    return r._ok;
+  }
+  // keyValue here is the record's real numeric id (RecordId), not the staff ID —
+  // see LEAVE_FIELD_MAP/OT_FIELD_MAP in assets/api-client.js. keyDate is unused
+  // (was only ever needed for the old ID+Date composite-key workaround).
+  if (sheetName === 'StaffLeave') {
+    const r = await LhbApi.updateLeave(keyValue, rowData);
+    if (!r._ok) console.warn('[LhbApi] updateLeave failed:', r.msg);
+    return r._ok;
+  }
+  if (sheetName === 'StaffOT') {
+    const r = await LhbApi.updateOT(keyValue, rowData);
+    if (!r._ok) console.warn('[LhbApi] updateOT failed:', r.msg);
+    return r._ok;
+  }
+  if (sheetName === 'Project') {
+    const r = await LhbApi.updateProject(keyValue, rowData);
+    if (!r._ok) console.warn('[LhbApi] updateProject failed:', r.msg);
     return r._ok;
   }
   if (!APPS_SCRIPT_URL) return false;
@@ -2579,10 +2647,10 @@ function renderLeave() {
       <td>${l.Reason||''}</td>
       <td><span class="badge ${badges[l.Status]||'badge-gray'}">${l.Status||''}</span></td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-success btn-sm" onclick="updateLeaveStatus('${l.ID}','${l.StartDate}','Approved')" title="អនុម័ត"><i class="fas fa-check"></i></button>
-        <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="updateLeaveStatus('${l.ID}','${l.StartDate}','Rejected')" title="បដិសេធ"><i class="fas fa-times"></i></button>
-        <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditLeave('${l.ID}','${l.StartDate}')" title="កែប្រែ"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-danger btn-sm" style="margin-left:4px;background:#6b7280;" onclick="deleteLeave('${l.ID}','${l.StartDate}')" title="លុប"><i class="fas fa-trash"></i></button>
+        <button class="btn btn-success btn-sm" onclick="updateLeaveStatus('${l.RecordId}','Approved')" title="អនុម័ត"><i class="fas fa-check"></i></button>
+        <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="updateLeaveStatus('${l.RecordId}','Rejected')" title="បដិសេធ"><i class="fas fa-times"></i></button>
+        <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditLeave('${l.RecordId}')" title="កែប្រែ"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-danger btn-sm" style="margin-left:4px;background:#6b7280;" onclick="deleteLeave('${l.RecordId}')" title="លុប"><i class="fas fa-trash"></i></button>
       </td>
     </tr>`;
   }).join('');
@@ -2595,9 +2663,12 @@ function openAddLeave() {
   openModal('leaveFormModal');
 }
 
-function openEditLeave(id, startDate) {
-  const l = appData.leave.find(x => x.ID === id && x.StartDate === startDate);
+let editingLeaveRecordId = null;
+
+function openEditLeave(recordId) {
+  const l = appData.leave.find(x => x.RecordId === recordId);
   if (!l) return;
+  editingLeaveRecordId = recordId;
   document.getElementById('lf_staff').value = l.ID;
   document.getElementById('lf_type').value = l.TypeOfLeave || '';
   document.getElementById('lf_start').value = formatDateInput(l.StartDate);
@@ -2606,33 +2677,17 @@ function openEditLeave(id, startDate) {
   openModal('leaveFormModal');
 }
 
-async function deleteLeave(id, startDate) {
+async function deleteLeave(recordId) {
   if (!confirm('តើអ្នកចង់លុបការឈប់សម្រាកនេះ?')) return;
   showLoading(true);
-  try {
-    // mode:'cors' + await so we know it actually reached the Sheet before updating
-    // the UI — the old no-cors fire-and-forget call could show "success" while the
-    // row silently stayed in the Sheet.
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST', mode: 'cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'deleteByIdDate', sheet: SHEETS.leave, keyId: id, keyDate: startDate })
-    });
-    const json = await res.json();
-    // Checked defensively (not just status==='ok') — a Code.gs bug (now fixed
-    // server-side, but old deployments may still have it) let deleteByIdDate report
-    // status:'ok' with deleted:0 when the date-column lookup silently failed to
-    // find StaffLeave's 'StartDate' column, so nothing was actually removed.
-    if (json.status !== 'ok' || !json.deleted) throw new Error(json.msg || 'រកមិនឃើញជួរដែលត្រូវលុប');
-    appData.leave = appData.leave.filter(l => !(l.ID === id && l.StartDate === startDate));
-    renderLeave();
-    showToast('🗑️ លុបការឈប់សម្រាកជោគជ័យ!', 'success');
-  } catch(e) {
-    console.warn('[deleteLeave]', e);
-    showToast('❌ លុបមិនបានជោគជ័យ — ' + e.message, 'warning');
-  } finally {
-    showLoading(false);
-  }
+  // Keyed on RecordId (the real Postgres row id) — not the staff ID, which is
+  // shared across every Leave record for that staff.
+  const ok = await deleteFromSheet('StaffLeave', 'RecordId', recordId);
+  showLoading(false);
+  if (!ok) { showToast('❌ លុបមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  appData.leave = appData.leave.filter(l => l.RecordId !== recordId);
+  renderLeave();
+  showToast('🗑️ លុបការឈប់សម្រាកជោគជ័យ!', 'success');
 }
 async function saveLeave() {
   const row = {
@@ -2645,60 +2700,38 @@ async function saveLeave() {
     Status: 'Pending',
     Days: calcDays(document.getElementById('lf_start').value, document.getElementById('lf_end').value)
   };
-  const leaveIdx = appData.leave.findIndex(l => l.ID === row.ID && l.StartDate === row.StartDate);
+  const leaveIdx = editingLeaveRecordId ? appData.leave.findIndex(l => l.RecordId === editingLeaveRecordId) : -1;
   const isLeaveEdit = leaveIdx >= 0;
   showLoading(true);
   const ok = isLeaveEdit
-    ? await updateInSheet(SHEETS.leave, 'ID', row.ID, row, row.StartDate)
+    ? await updateInSheet(SHEETS.leave, 'RecordId', editingLeaveRecordId, row)
     : await writeToSheet(SHEETS.leave, row, 'append');
   showLoading(false);
   if (!ok) { showToast('❌ ' + (isLeaveEdit?'កែប្រែ':'ចុះឈ្មោះ') + ' មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
-  if (isLeaveEdit) appData.leave[leaveIdx] = row;
+  if (isLeaveEdit) appData.leave[leaveIdx] = { ...row, RecordId: editingLeaveRecordId };
   else appData.leave.push(row);
+  editingLeaveRecordId = null;
   closeModal('leaveFormModal');
   renderLeave();
   showToast((isLeaveEdit?'✅ កែប្រែ':'✅ ចុះឈ្មោះ') + ' + Sync ជោគជ័យ!', 'success');
   updateLeaveBadge();
 }
-async function updateLeaveStatus(id, startDate, status) {
+async function updateLeaveStatus(recordId, status) {
   // Update local data immediately (optimistic)
-  const idx = appData.leave.findIndex(l =>
-    String(l.ID||'').trim() === String(id).trim() &&
-    String(l.StartDate||'').trim() === String(startDate).trim()
-  );
+  const idx = appData.leave.findIndex(l => l.RecordId === recordId);
   if (idx < 0) { showToast('⚠️ រកមិនឃើញទិន្នន័យ', 'warning'); return; }
 
   appData.leave[idx].Status = status;
   renderLeave();
   showToast('⏳ កំពុង Sync...', 'info');
 
-  // Save to Google Sheet
-  try {
-    const row = { ...appData.leave[idx], Status: status };
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action:   'update',
-        sheet:    'StaffLeave',
-        keyField: 'ID',
-        keyValue: String(id).trim(),
-        keyDate:  String(startDate).trim(),
-        data:     { Status: status }
-      })
-    });
-    const j = await res.json();
-    if (j.status === 'ok') {
-      const label = status === 'Approved' ? '✅ បានអនុម័ត' : '❌ បានបដិសេធ';
-      showToast(label, status === 'Approved' ? 'success' : 'error');
-      updateLeaveBadge();
-    } else {
-      showToast('⚠️ Sync Error: ' + (j.msg||''), 'warning');
-    }
-  } catch(e) {
-    showToast('❌ Network Error: ' + e.message, 'error');
-    console.error('updateLeaveStatus:', e);
+  const ok = await updateInSheet('StaffLeave', 'RecordId', recordId, { Status: status });
+  if (ok) {
+    const label = status === 'Approved' ? '✅ បានអនុម័ត' : '❌ បានបដិសេធ';
+    showToast(label, status === 'Approved' ? 'success' : 'error');
+    updateLeaveBadge();
+  } else {
+    showToast('⚠️ Sync Error', 'warning');
   }
 }
 function calcDays(s, e) {
@@ -2881,11 +2914,6 @@ function renderOT() {
 }
 function openAddOT() { openModal('otFormModal'); }
 let editingOTIndex = -1;
-// Original Date of the OT row being edited — needed as a secondary match key
-// since 'ID' alone is the staff ID, not unique per OT record. Without this,
-// updateInSheet('StaffOT','ID',...) matches the FIRST OT row for that staff
-// and silently edits/loses the wrong record whenever a staff has 2+ OT entries.
-let editingOTOriginalDate = '';
 
 async function saveOT() {
   const staffId = document.getElementById('ot_staff').value;
@@ -2900,16 +2928,17 @@ async function saveOT() {
   };
   showLoading(true);
   const isOTEdit = editingOTIndex >= 0;
+  // Keyed on RecordId (the real Postgres row id) — not the staff ID, which is
+  // shared across every OT record for that staff.
   const ok = isOTEdit
-    ? await updateInSheet('StaffOT', 'ID', row.ID, row, editingOTOriginalDate)
+    ? await updateInSheet('StaffOT', 'RecordId', appData.ot[editingOTIndex].RecordId, row)
     : await writeToSheet('StaffOT', row, 'append');
   showLoading(false);
   if (!ok) { showToast('❌ ' + (isOTEdit?'កែប្រែ':'បន្ថែម') + ' OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
-  if (isOTEdit) appData.ot[editingOTIndex] = row;
+  if (isOTEdit) appData.ot[editingOTIndex] = { ...row, RecordId: appData.ot[editingOTIndex].RecordId };
   else appData.ot.push(row);
   showToast((isOTEdit?'✅ កែប្រែ':'✅ បន្ថែម') + ' OT + Sync ជោគជ័យ!', 'success');
   editingOTIndex = -1;
-  editingOTOriginalDate = '';
   closeModal('otFormModal');
   renderOT();
 }
@@ -2917,7 +2946,6 @@ async function saveOT() {
 function openEditOT(idx) {
   editingOTIndex = idx;
   const o = appData.ot[idx];
-  editingOTOriginalDate = o.Date || '';
   document.getElementById('ot_staff').value = o.ID || '';
   document.getElementById('ot_date').value = formatDateInput(o.Date);
   document.getElementById('ot_hours').value = o.Hours || '';
@@ -2930,26 +2958,12 @@ async function deleteOT(idx) {
   if (!confirm('តើអ្នកចង់លុប OT នេះ?')) return;
   const row = appData.ot[idx];
   showLoading(true);
-  try {
-    // Match by ID+Date (not ID alone) — a staff can have multiple OT rows,
-    // so ID-only matching could delete the wrong one. mode:'cors'+await so
-    // we know the delete actually landed before updating the UI.
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST', mode: 'cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'deleteByIdDate', sheet: 'StaffOT', keyId: row.ID, keyDate: row.Date })
-    });
-    const json = await res.json();
-    if (json.status !== 'ok' || !json.deleted) throw new Error(json.msg || 'រកមិនឃើញជួរដែលត្រូវលុប');
-    appData.ot.splice(idx, 1);
-    renderOT();
-    showToast('🗑️ លុប OT ជោគជ័យ', 'success');
-  } catch(e) {
-    console.warn('[deleteOT]', e);
-    showToast('❌ លុប OT មិនបានជោគជ័យ — ' + e.message, 'warning');
-  } finally {
-    showLoading(false);
-  }
+  const ok = await deleteFromSheet('StaffOT', 'RecordId', row.RecordId);
+  showLoading(false);
+  if (!ok) { showToast('❌ លុប OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  appData.ot.splice(idx, 1);
+  renderOT();
+  showToast('🗑️ លុប OT ជោគជ័យ', 'success');
 }
 
 // ========== PROJECT ==========

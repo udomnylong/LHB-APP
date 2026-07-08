@@ -266,10 +266,13 @@ async function loadStaffOt(client, sheets, staffCodes) {
       staff_code, date: toDateStr(r.Date), hours: toNumber(r.Hours),
       time_from: toTimeStr(r.TimeFrom), time_to: toTimeStr(r.TimeTo),
       type_of_work: toStr(r.TypeOfWork), reason: toStr(r.Reason), status: toStr(r.Status),
+      // The real hr-system.html UI only ever wrote TypeOfWork + Remark (TimeFrom/TimeTo/
+      // Reason above are legacy columns from setupHeaders() that were never populated).
+      remark: toStr(r.Remark),
     });
   });
   const inserted = await reload(client, 'staff_ot',
-    ['staff_code', 'date', 'hours', 'time_from', 'time_to', 'type_of_work', 'reason', 'status'], rows);
+    ['staff_code', 'date', 'hours', 'time_from', 'time_to', 'type_of_work', 'reason', 'status', 'remark'], rows);
   return { table: 'staff_ot', inserted, skipped: raw.length - rows.length };
 }
 

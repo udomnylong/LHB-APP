@@ -176,6 +176,10 @@ CREATE TABLE IF NOT EXISTS staff_ot (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_staff_ot_staff_date ON staff_ot (staff_code, date);
+-- time_from/time_to/reason above were never populated by the real hr-system.html UI
+-- (it only ever wrote TypeOfWork + Remark, see SHEET_HEADERS.StaffOT) — added additively
+-- rather than repurposing the unused `reason` column.
+ALTER TABLE staff_ot ADD COLUMN IF NOT EXISTS remark TEXT;
 
 -- ============================================================
 -- Food  (Food sheet — kiosk, no login, staff_code nullable)
