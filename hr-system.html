@@ -2881,6 +2881,11 @@ function renderOT() {
 }
 function openAddOT() { openModal('otFormModal'); }
 let editingOTIndex = -1;
+// Original Date of the OT row being edited — needed as a secondary match key
+// since 'ID' alone is the staff ID, not unique per OT record. Without this,
+// updateInSheet('StaffOT','ID',...) matches the FIRST OT row for that staff
+// and silently edits/loses the wrong record whenever a staff has 2+ OT entries.
+let editingOTOriginalDate = '';
 
 async function saveOT() {
   const staffId = document.getElementById('ot_staff').value;
@@ -2896,7 +2901,7 @@ async function saveOT() {
   showLoading(true);
   const isOTEdit = editingOTIndex >= 0;
   const ok = isOTEdit
-    ? await updateInSheet('StaffOT', 'ID', row.ID, row)
+    ? await updateInSheet('StaffOT', 'ID', row.ID, row, editingOTOriginalDate)
     : await writeToSheet('StaffOT', row, 'append');
   showLoading(false);
   if (!ok) { showToast('❌ ' + (isOTEdit?'កែប្រែ':'បន្ថែម') + ' OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
@@ -2904,6 +2909,7 @@ async function saveOT() {
   else appData.ot.push(row);
   showToast((isOTEdit?'✅ កែប្រែ':'✅ បន្ថែម') + ' OT + Sync ជោគជ័យ!', 'success');
   editingOTIndex = -1;
+  editingOTOriginalDate = '';
   closeModal('otFormModal');
   renderOT();
 }
@@ -2911,6 +2917,7 @@ async function saveOT() {
 function openEditOT(idx) {
   editingOTIndex = idx;
   const o = appData.ot[idx];
+  editingOTOriginalDate = o.Date || '';
   document.getElementById('ot_staff').value = o.ID || '';
   document.getElementById('ot_date').value = formatDateInput(o.Date);
   document.getElementById('ot_hours').value = o.Hours || '';
@@ -2923,12 +2930,26 @@ async function deleteOT(idx) {
   if (!confirm('តើអ្នកចង់លុប OT នេះ?')) return;
   const row = appData.ot[idx];
   showLoading(true);
-  const ok = await deleteFromSheet('StaffOT', 'ID', row.ID);
-  showLoading(false);
-  if (!ok) { showToast('❌ លុប OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
-  appData.ot.splice(idx, 1);
-  renderOT();
-  showToast('🗑️ លុប OT ជោគជ័យ', 'success');
+  try {
+    // Match by ID+Date (not ID alone) — a staff can have multiple OT rows,
+    // so ID-only matching could delete the wrong one. mode:'cors'+await so
+    // we know the delete actually landed before updating the UI.
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST', mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteByIdDate', sheet: 'StaffOT', keyId: row.ID, keyDate: row.Date })
+    });
+    const json = await res.json();
+    if (json.status !== 'ok' || !json.deleted) throw new Error(json.msg || 'រកមិនឃើញជួរដែលត្រូវលុប');
+    appData.ot.splice(idx, 1);
+    renderOT();
+    showToast('🗑️ លុប OT ជោគជ័យ', 'success');
+  } catch(e) {
+    console.warn('[deleteOT]', e);
+    showToast('❌ លុប OT មិនបានជោគជ័យ — ' + e.message, 'warning');
+  } finally {
+    showLoading(false);
+  }
 }
 
 // ========== PROJECT ==========

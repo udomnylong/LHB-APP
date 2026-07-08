@@ -1000,7 +1000,7 @@ function warmup() {
   try {
     getSS(); // open spreadsheet to warm the connection
     // Pre-cache the most-read sheets
-    var sheets = ['CheckIn', 'CheckOut', 'StaffInfo', 'Project'];
+    var sheets = ['CheckIn', 'CheckOut', 'StaffInfo', 'Project', 'StaffOT', 'StaffLeave'];
     sheets.forEach(function(s) {
       var outKey = 'doget_' + s;
       if (!CacheService.getScriptCache().get(outKey)) {
