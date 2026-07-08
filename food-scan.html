@@ -198,6 +198,7 @@ textarea{resize:none;line-height:1.5;}
   </div>
 </div>
 
+<script src="assets/api-client.js"></script>
 <script>
 // ============================================================
 // CONFIG
@@ -220,10 +221,44 @@ var photoURL  = {m:'',l:'',e:''};  // Drive URL (after upload)
 // ============================================================
 // INIT
 // ============================================================
+// Fast path — staff-portal.html already knows the full staff record (ID, Name,
+// Position, Department, ProjectName, ...) and hands it off via sessionStorage
+// before navigating here. Paint the preview from that immediately, with zero
+// network wait, instead of blocking on the full StaffInfo list to load first.
+function autoFillStaffFromPortalFast() {
+  try {
+    var saved = sessionStorage.getItem('portal_staff') || sessionStorage.getItem('food_staff');
+    if (!saved) return false;
+    var ps = JSON.parse(saved);
+    if (!ps.ID) return false;
+    curStaff = ps;
+    var nm = cn(ps.Name);
+    document.getElementById('sAv').textContent = nm[0] || '?';
+    document.getElementById('sNm').textContent = nm;
+    document.getElementById('sSb').textContent = (ps.Position||'')+' | '+(ps.Department||'')+' | '+ps.ID;
+    document.getElementById('sPv').style.display = 'block';
+    document.getElementById('searchInput').value = nm + ' (' + ps.ID + ')';
+    document.getElementById('searchResults').style.display = 'none';
+    curProj = ps.ProjectName || '';
+    var sel = document.getElementById('selProj');
+    sel.innerHTML = curProj
+      ? '<option value="'+curProj+'" selected>'+curProj+'</option>'
+      : '<option value="">-- ជ្រើសរើសគម្រោង --</option>';
+    shows(['s2','s3','s4']);
+    toast('✅ Auto: ' + nm);
+    return true;
+  } catch(e) { console.warn('autoFillStaffFromPortalFast:', e); return false; }
+}
+
+// Fallback path — runs once the full StaffInfo list finishes loading. If the fast
+// path above already painted the preview, this just refreshes the project dropdown
+// with the full option list; otherwise (e.g. no portal_staff handoff) it does the
+// original lookup-and-select.
 function autoFillStaffFromPortal() {
   try {
     var saved = sessionStorage.getItem('portal_staff') || sessionStorage.getItem('food_staff');
     if (!saved || !allStaff || !allStaff.length) return;
+    if (curStaff) { buildProjForStaff(); return; }
     var ps = JSON.parse(saved);
     var staffId    = ps.ID    || ps._staffId || '';
     var staffGmail = ps.Gmail || ps.email    || '';
@@ -250,6 +285,7 @@ window.onload = function() {
   if(h>=5&&h<10)       togMeal('m');
   else if(h>=10&&h<15) togMeal('l');
   else if(h>=15&&h<21) togMeal('e');
+  autoFillStaffFromPortalFast();
   loadStaff();
   // After 12s, show retry if still no data
   setTimeout(function(){
@@ -269,9 +305,32 @@ window.onload = function() {
 };
 
 // ============================================================
-// LOAD STAFF (JSONP — no CORS needed)
+// LOAD STAFF — Cloud Run/Cloud SQL first (fast, no per-row Sheets round-trip),
+// falling back to the old gviz JSONP / Apps Script chain if that's unavailable.
 // ============================================================
 function loadStaff() {
+  showLd(true); toast('⏳ Loading...');
+  if (window.LhbApi) {
+    LhbApi.getStaff().then(function(r){
+      if (r._ok && Array.isArray(r.data) && r.data.length) {
+        allStaff = r.data;
+        buildProjs();
+        autoFillStaffFromPortal();
+        toast('✅ Load ' + allStaff.length + ' នាក់');
+        showLd(false);
+      } else {
+        loadStaffViaGviz();
+      }
+    }).catch(function(){ loadStaffViaGviz(); });
+  } else {
+    loadStaffViaGviz();
+  }
+}
+
+// ============================================================
+// LOAD STAFF (JSONP — no CORS needed) — fallback path
+// ============================================================
+function loadStaffViaGviz() {
   showLd(true); toast('⏳ Loading...');
   var cb  = 'fscb'+Date.now();
   var url = 'https://docs.google.com/spreadsheets/d/'+SHEET_ID+
