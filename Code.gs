@@ -537,6 +537,7 @@ function doPost(e) {
           // Batch write: merge into existing row, then setValues once (faster than N setValue calls)
           var merged=headers.map(function(h,j){return row[h]!==undefined?row[h]:data[i][j];});
           ws.getRange(i+1,1,1,headers.length).setValues([merged]);
+          invalidateSheetCache(p.sheet);
           return respond({ status:'ok' });
         }
       }
@@ -553,7 +554,7 @@ function doPost(e) {
       if (idIdx<0) idIdx=headers.indexOf('ID');
       var keyVal=String(p.keyValue||p.id||'').trim();
       for (var i=data.length-1;i>=1;i--){
-        if (String(data[i][idIdx]).trim()===keyVal){ws.deleteRow(i+1);return respond({ status:'ok' });}
+        if (String(data[i][idIdx]).trim()===keyVal){ws.deleteRow(i+1);invalidateSheetCache(p.sheet);return respond({ status:'ok' });}
       }
       return respond({ status:'error', msg:'Row not found: '+keyVal+' in '+keyField });
     }
@@ -563,14 +564,22 @@ function doPost(e) {
       var ss=getSS(), ws=ss.getSheetByName(p.sheet);
       if (!ws) return respond({ status:'ok', msg:'Sheet not found' });
       var data=ws.getDataRange().getValues(), headers=data[0].map(function(h){return String(h).trim();});
-      var idIdx=headers.indexOf('ID'), dateIdx=headers.indexOf('Date');
+      var idIdx=headers.indexOf('ID');
+      // Not every sheet names its date column 'Date' — StaffLeave uses 'StartDate'.
+      // Falling back silently used to mean dateIdx=-1 forever, so the match never
+      // hit and this action quietly deleted nothing while still reporting status:'ok'.
+      var dateIdx=headers.indexOf('Date');
+      if (dateIdx<0) dateIdx=headers.indexOf('StartDate');
+      if (dateIdx<0) dateIdx=headers.indexOf('EndDate');
       var deleted=0;
       for (var i=data.length-1;i>=1;i--){
         if (String(data[i][idIdx]).trim()===String(p.keyId).trim()&&normDate(data[i][dateIdx])===String(p.keyDate).trim()){
           ws.deleteRow(i+1); deleted++;
         }
       }
-      return respond({ status:'ok', deleted:deleted });
+      if (deleted>0) invalidateSheetCache(p.sheet);
+      return respond({ status: deleted>0 ? 'ok' : 'error', deleted:deleted,
+        msg: deleted>0 ? undefined : 'No matching row found for ID '+p.keyId+' @ '+p.keyDate });
     }
 
     // ── uploadPhoto — upload file ថ្មីទៅ Drive Folder ──

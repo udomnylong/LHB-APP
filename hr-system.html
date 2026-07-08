@@ -1718,12 +1718,16 @@ async function writeToSheet(sheetName, rowData, action) {
   const rowArr = hdrs.map(h => (rowData[h] !== undefined && rowData[h] !== null) ? String(rowData[h]) : '');
   const payload = { action: action, sheet: sheetName, data: rowData, row: rowArr, headers: hdrs };
   try {
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST', mode: 'no-cors',
+    // mode:'cors' (not 'no-cors') so we can actually read whether the write succeeded —
+    // no-cors fire-and-forget meant this always reported success even when it failed.
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST', mode: 'cors',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'text/plain' }
     });
-    return true;
+    const json = await res.json();
+    if (json.status !== 'ok') console.warn('[writeToSheet]', json.msg);
+    return json.status === 'ok';
   } catch(e) { console.warn('[writeToSheet]', e); return false; }
 }
 
@@ -1737,13 +1741,15 @@ async function deleteFromSheet(sheetName, keyField, keyValue) {
   if (!APPS_SCRIPT_URL) return false;
   const payload = { action: 'delete', sheet: sheetName, keyField, keyValue: String(keyValue) };
   try {
-    fetch(APPS_SCRIPT_URL, {
-      method: 'POST', mode: 'no-cors',
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST', mode: 'cors',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'text/plain' }
     });
-    return true;
-  } catch(e) { return true; }
+    const json = await res.json();
+    if (json.status !== 'ok') console.warn('[deleteFromSheet]', json.msg);
+    return json.status === 'ok';
+  } catch(e) { console.warn('[deleteFromSheet]', e); return false; }
 }
 
 // Update a row in sheet
@@ -1759,13 +1765,15 @@ async function updateInSheet(sheetName, keyField, keyValue, rowData, keyDate) {
   const payload = { action: 'update', sheet: sheetName, keyField, keyValue: String(keyValue), data: rowData, row: rowArr, headers: hdrs };
   if (keyDate) payload.keyDate = String(keyDate);
   try {
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST', mode: 'no-cors',
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST', mode: 'cors',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'text/plain' }
     });
-    return true;
-  } catch(e) { return true; }
+    const json = await res.json();
+    if (json.status !== 'ok') console.warn('[updateInSheet]', json.msg);
+    return json.status === 'ok';
+  } catch(e) { console.warn('[updateInSheet]', e); return false; }
 }
 
 async function setupSheetHeaders() {
@@ -2184,15 +2192,6 @@ function renderStaff(data) {
   renderPages('staffPages', currentPage.staff, Math.ceil(total/PER_PAGE), p => { currentPage.staff = p; renderStaff(); });
 }
 
-function populateProjectFilter(selectId, data, field) {
-  const sel = document.getElementById(selectId);
-  if (!sel) return;
-  const cur = sel.value;
-  const projects = [...new Set((data||[]).map(r => String(r[field]||'')).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">🏗️ គម្រោងទាំងអស់</option>' +
-    projects.map(p => `<option value="${p}"${p===cur?' selected':''}>${p}</option>`).join('');
-}
-
 function filterStaff() { currentPage.staff = 1; renderStaff(); }
 
 function populateProjectFilter(selId, data, field) {
@@ -2609,14 +2608,31 @@ function openEditLeave(id, startDate) {
 
 async function deleteLeave(id, startDate) {
   if (!confirm('តើអ្នកចង់លុបការឈប់សម្រាកនេះ?')) return;
-  appData.leave = appData.leave.filter(l => !(l.ID === id && l.StartDate === startDate));
-  fetch(APPS_SCRIPT_URL, {
-    method: 'POST', mode: 'no-cors',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ action: 'deleteByIdDate', sheet: SHEETS.leave, keyId: id, keyDate: startDate })
-  });
-  renderLeave();
-  showToast('🗑️ លុបការឈប់សម្រាកជោគជ័យ!', 'success');
+  showLoading(true);
+  try {
+    // mode:'cors' + await so we know it actually reached the Sheet before updating
+    // the UI — the old no-cors fire-and-forget call could show "success" while the
+    // row silently stayed in the Sheet.
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST', mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteByIdDate', sheet: SHEETS.leave, keyId: id, keyDate: startDate })
+    });
+    const json = await res.json();
+    // Checked defensively (not just status==='ok') — a Code.gs bug (now fixed
+    // server-side, but old deployments may still have it) let deleteByIdDate report
+    // status:'ok' with deleted:0 when the date-column lookup silently failed to
+    // find StaffLeave's 'StartDate' column, so nothing was actually removed.
+    if (json.status !== 'ok' || !json.deleted) throw new Error(json.msg || 'រកមិនឃើញជួរដែលត្រូវលុប');
+    appData.leave = appData.leave.filter(l => !(l.ID === id && l.StartDate === startDate));
+    renderLeave();
+    showToast('🗑️ លុបការឈប់សម្រាកជោគជ័យ!', 'success');
+  } catch(e) {
+    console.warn('[deleteLeave]', e);
+    showToast('❌ លុបមិនបានជោគជ័យ — ' + e.message, 'warning');
+  } finally {
+    showLoading(false);
+  }
 }
 async function saveLeave() {
   const row = {
@@ -2631,12 +2647,14 @@ async function saveLeave() {
   };
   const leaveIdx = appData.leave.findIndex(l => l.ID === row.ID && l.StartDate === row.StartDate);
   const isLeaveEdit = leaveIdx >= 0;
+  showLoading(true);
+  const ok = isLeaveEdit
+    ? await updateInSheet(SHEETS.leave, 'ID', row.ID, row, row.StartDate)
+    : await writeToSheet(SHEETS.leave, row, 'append');
+  showLoading(false);
+  if (!ok) { showToast('❌ ' + (isLeaveEdit?'កែប្រែ':'ចុះឈ្មោះ') + ' មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   if (isLeaveEdit) appData.leave[leaveIdx] = row;
   else appData.leave.push(row);
-  showLoading(true);
-  if (isLeaveEdit) await updateInSheet(SHEETS.leave, 'ID', row.ID, row, row.StartDate);
-  else await writeToSheet(SHEETS.leave, row, 'append');
-  showLoading(false);
   closeModal('leaveFormModal');
   renderLeave();
   showToast((isLeaveEdit?'✅ កែប្រែ':'✅ ចុះឈ្មោះ') + ' + Sync ជោគជ័យ!', 'success');
@@ -2876,16 +2894,15 @@ async function saveOT() {
     Remark: document.getElementById('ot_remark').value
   };
   showLoading(true);
-  if (editingOTIndex >= 0) {
-    appData.ot[editingOTIndex] = row;
-    await updateInSheet('StaffOT', 'ID', row.ID, row);
-    showToast('✅ កែប្រែ OT + Sync ជោគជ័យ!', 'success');
-  } else {
-    appData.ot.push(row);
-    await writeToSheet('StaffOT', row, 'append');
-    showToast('✅ បន្ថែម OT + Sync ជោគជ័យ!', 'success');
-  }
+  const isOTEdit = editingOTIndex >= 0;
+  const ok = isOTEdit
+    ? await updateInSheet('StaffOT', 'ID', row.ID, row)
+    : await writeToSheet('StaffOT', row, 'append');
   showLoading(false);
+  if (!ok) { showToast('❌ ' + (isOTEdit?'កែប្រែ':'បន្ថែម') + ' OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  if (isOTEdit) appData.ot[editingOTIndex] = row;
+  else appData.ot.push(row);
+  showToast((isOTEdit?'✅ កែប្រែ':'✅ បន្ថែម') + ' OT + Sync ជោគជ័យ!', 'success');
   editingOTIndex = -1;
   closeModal('otFormModal');
   renderOT();
@@ -2905,8 +2922,11 @@ function openEditOT(idx) {
 async function deleteOT(idx) {
   if (!confirm('តើអ្នកចង់លុប OT នេះ?')) return;
   const row = appData.ot[idx];
+  showLoading(true);
+  const ok = await deleteFromSheet('StaffOT', 'ID', row.ID);
+  showLoading(false);
+  if (!ok) { showToast('❌ លុប OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   appData.ot.splice(idx, 1);
-  await deleteFromSheet('StaffOT', 'ID', row.ID);
   renderOT();
   showToast('🗑️ លុប OT ជោគជ័យ', 'success');
 }
@@ -2930,8 +2950,11 @@ function renderProjects() {
 }
 async function deleteProject(id) {
   if (!confirm('តើអ្នកចង់លុបគម្រោង ' + id + ' មែនទេ?')) return;
+  showLoading(true);
+  const ok = await deleteFromSheet(SHEETS.project, 'ProjectID', id);
+  showLoading(false);
+  if (!ok) { showToast('❌ លុបគម្រោងមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   appData.project = appData.project.filter(p => p.ProjectID !== id);
-  await deleteFromSheet(SHEETS.project, 'ProjectID', id);
   renderProjects();
   populateSelects();
   showToast('🗑️ លុបគម្រោងជោគជ័យ!', 'success');
@@ -2966,12 +2989,14 @@ async function saveProject() {
   };
   const pidx = appData.project.findIndex(p => p.ProjectID === row.ProjectID);
   const isProjEdit = pidx >= 0;
+  showLoading(true);
+  const ok = isProjEdit
+    ? await updateInSheet(SHEETS.project, 'ProjectID', row.ProjectID, row)
+    : await writeToSheet(SHEETS.project, row, 'append');
+  showLoading(false);
+  if (!ok) { showToast('❌ ' + (isProjEdit?'កែប្រែ':'បន្ថែម') + 'គម្រោងមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   if (isProjEdit) appData.project[pidx] = row;
   else appData.project.push(row);
-  showLoading(true);
-  if (isProjEdit) await updateInSheet(SHEETS.project, 'ProjectID', row.ProjectID, row);
-  else await writeToSheet(SHEETS.project, row, 'append');
-  showLoading(false);
   closeModal('projectFormModal');
   renderProjects();
   populateSelects();
