@@ -1000,11 +1000,16 @@ function warmup() {
   try {
     getSS(); // open spreadsheet to warm the connection
     // Pre-cache the most-read sheets
-    // NOTE: CheckIn/CheckOut excluded — those reads now go through Cloud Run/Cloud SQL
-    // (see hr-system.html LhbApi.getCheckEventSheetRows), so warming their GAS cache is
-    // dead work. The sheets keep growing daily via writeToSheet(), and full-scanning them
-    // here was pushing warmup() past the 6-minute execution limit.
-    var sheets = ['StaffInfo', 'Project', 'StaffOT', 'StaffLeave'];
+    // NOTE: CheckIn/CheckOut/Project/StaffOT/StaffLeave excluded — those reads now go
+    // through Cloud Run/Cloud SQL (see hr-system.html LhbApi.getCheckEventSheetRows /
+    // getProjects / getOT / getLeave), so warming their GAS doGet cache is dead work.
+    // StaffOT/StaffLeave in particular keep growing daily (staff-portal.html still
+    // appends to them directly via GAS), and full-scanning them here was pushing
+    // warmup() past the 6-minute execution limit — same failure mode as the
+    // CheckIn/CheckOut case this function was fixed for previously.
+    // StaffInfo is kept: it's still read via GAS doGet directly by staff-portal.html,
+    // food-scan.html, and the embedded QR-scan view in hr-system.html.
+    var sheets = ['StaffInfo'];
     sheets.forEach(function(s) {
       var outKey = 'doget_' + s;
       if (!CacheService.getScriptCache().get(outKey)) {
