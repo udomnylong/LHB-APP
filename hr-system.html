@@ -2302,8 +2302,11 @@ function populateProjectFilter(selId, data, field) {
 
 async function deleteStaff(id) {
   if (!confirm('តើអ្នកចង់លុបបុគ្គលិក ' + id + ' មែនទេ?')) return;
+  showLoading(true);
+  const ok = await deleteFromSheet(SHEETS.staff, 'ID', id);
+  showLoading(false);
+  if (!ok) { showToast('❌ លុបមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   appData.staff = appData.staff.filter(s => s.ID !== id);
-  await deleteFromSheet(SHEETS.staff, 'ID', id);
   renderStaff();
   populateSelects();
   showToast('🗑️ លុបបុគ្គលិកជោគជ័យ!', 'success');
@@ -2434,17 +2437,14 @@ async function saveStaff() {
     showToast('❌ ID "' + row.ID + '" មានស្រាប់ហើយ! សូមប្រើ ID ផ្សេង', 'error');
     return;
   }
+  showLoading(true);
+  const ok = isEdit
+    ? await updateInSheet(SHEETS.staff, 'ID', row.ID, row)
+    : await writeToSheet(SHEETS.staff, row, 'append');
+  showLoading(false);
+  if (!ok) { showToast('❌ ' + (isEdit?'កែប្រែ':'បន្ថែម') + ' មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   if (isEdit) appData.staff[idx] = row;
   else appData.staff.push(row);
-  showLoading(true);
-  if (isEdit) {
-    // UPDATE existing row in sheet — don't append new row
-    await updateInSheet(SHEETS.staff, 'ID', row.ID, row);
-  } else {
-    // New staff — append
-    await writeToSheet(SHEETS.staff, row, 'append');
-  }
-  showLoading(false);
   closeModal('staffFormModal');
   renderStaff();
   populateSelects();
