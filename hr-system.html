@@ -433,6 +433,7 @@ tbody tr:last-child td{border-bottom:none;}
             <div class="search-box"><i class="fas fa-search"></i><input type="text" id="attSearch" placeholder="ស្វែងរក..." oninput="filterAttendance()"></div>
 
             <button class="btn btn-outline btn-sm" onclick="openAttSettings()" title="កំណត់លក្ខណ​វត្តមាន"><i class="fas fa-sliders-h" style="margin-right:4px;"></i>កំណត់</button>
+            <button class="btn btn-outline btn-sm" onclick="openAttRangeReport()" title="របាយការណ៍វត្តមានតាមចន្លោះកាលបរិច្ឆេទ"><i class="fas fa-calendar-alt" style="margin-right:4px;"></i>របាយការណ៍ខែ</button>
             <button class="btn btn-primary btn-sm" onclick="printAttendancePDF()"><i class="fas fa-file-pdf"></i>PDF</button>
             <button class="btn btn-outline btn-sm" onclick="exportAttCSV()"><i class="fas fa-file-excel"></i>Export</button>
           </div>
@@ -444,6 +445,55 @@ tbody tr:last-child td{border-bottom:none;}
           </table>
         </div>
         <div class="pagination"><span id="attPagInfo">បង្ហាញ 0 ទិន្នន័យ</span><div class="page-btns" id="attPages"></div></div>
+      </div>
+    </div>
+
+    <!-- ===== ATTENDANCE RANGE REPORT MODAL ===== -->
+    <div id="attRangeReportModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;align-items:center;justify-content:center;" onclick="if(event.target===this)closeAttRangeReport()">
+      <div style="background:#fff;border-radius:16px;width:96%;max-width:640px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3);">
+        <div style="padding:14px 22px;display:flex;align-items:center;justify-content:space-between;background:var(--primary);">
+          <h3 style="color:#fff;font-size:16px;margin:0;"><i class="fas fa-calendar-alt" style="margin-right:8px;color:var(--accent);"></i>របាយការណ៍វត្តមានប្រចាំខែ</h3>
+          <button onclick="closeAttRangeReport()" style="background:rgba(255,255,255,.2);border:none;border-radius:6px;width:30px;height:30px;cursor:pointer;color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+        <div style="padding:20px 22px;overflow-y:auto;flex:1;">
+          <div style="display:flex;gap:12px;margin-bottom:16px;">
+            <div style="flex:1;">
+              <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600;">ចាប់ពីថ្ងៃទី</label>
+              <input type="date" id="attRptFrom" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;">
+            </div>
+            <div style="flex:1;">
+              <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600;">ដល់ថ្ងៃទី</label>
+              <input type="date" id="attRptTo" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-km);font-size:13px;">
+            </div>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:7px;font-weight:600;">បុគ្គលិក</label>
+            <div style="display:flex;gap:16px;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                <input type="radio" name="attRptMode" value="all" checked onchange="attRptSetMode('all')"> បុគ្គលិកទាំងអស់
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                <input type="radio" name="attRptMode" value="select" onchange="attRptSetMode('select')"> ជ្រើសរើសបុគ្គលិក
+              </label>
+            </div>
+          </div>
+
+          <div id="attRptStaffPicker" style="display:none;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:8px;">
+            <div style="display:flex;gap:8px;padding:8px;border-bottom:1px solid var(--border);background:#f8fafc;">
+              <div class="search-box" style="flex:1;"><i class="fas fa-search"></i><input type="text" id="attRptStaffSearch" placeholder="ស្វែងរកបុគ្គលិក..." oninput="attRptRenderStaffList(this.value)"></div>
+              <button class="btn btn-outline btn-sm" type="button" onclick="attRptSelectAllVisible(true)">ជ្រើសទាំងអស់</button>
+              <button class="btn btn-outline btn-sm" type="button" onclick="attRptSelectAllVisible(false)">ដកចេញទាំងអស់</button>
+            </div>
+            <div id="attRptStaffList" style="max-height:240px;overflow-y:auto;padding:6px 10px;"></div>
+          </div>
+          <div id="attRptSelectedCount" style="font-size:12px;color:var(--text2);"></div>
+        </div>
+        <div style="padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;">
+          <button class="btn btn-outline btn-sm" onclick="closeAttRangeReport()">បិទ</button>
+          <button class="btn btn-outline btn-sm" onclick="exportAttRangeReportCSV()"><i class="fas fa-file-excel"></i> Export CSV</button>
+          <button class="btn btn-primary btn-sm" onclick="printAttRangeReport()"><i class="fas fa-file-pdf"></i> Print PDF</button>
+        </div>
       </div>
     </div>
 
@@ -2428,6 +2478,139 @@ function vlookupStaff(id) {
   return appData.staff.find(s => String(s.ID).trim() === String(id).trim()) || {};
 }
 
+// Compute one staff member's attendance status for a given date (VLookup: StaffInfo + Attendance + CheckIn + CheckOut).
+// Shared by renderAttendance() (single day) and the monthly range report (many days).
+function computeAttForDate(s, selDate) {
+  const sid = String(s.ID).trim();
+
+  // From Attendance sheet (main)
+  const attRow = appData.attendance.find(a =>
+    String(a.ID).trim() === sid && (!selDate || (a.Date||'') === selDate));
+
+  const sGmail = String(s.Gmail||'').toLowerCase().trim();
+
+  // From CheckIn sheet — deduplicated: pick earliest/first match
+  // Priority: ID match first; Gmail only as fallback when no ID match found.
+  // This prevents false positives when multiple staff share the same company Gmail.
+  const _ciDateOk = c => { const d=String(c.Date||c.Timestamp||'').split('T')[0]; return !selDate||d===selDate; };
+  const ciByID  = (appData.checkin||[]).filter(c => _ciDateOk(c) && String(c.ID||'').trim().toUpperCase() === sid.toUpperCase());
+  const ciRows  = ciByID.length > 0 ? ciByID
+                : sGmail ? (appData.checkin||[]).filter(c => _ciDateOk(c) && String(c.Gmail||'').toLowerCase().trim() === sGmail)
+                : [];
+  const ciRow = ciRows.length > 0 ? ciRows[0] : null; // earliest only
+
+  // From CheckOut sheet — deduplicated: pick latest/last match
+  const _coDok = c => { const d=String(c.Date||c.Timestamp||'').split('T')[0]; return !selDate||d===selDate; };
+  const coByID  = (appData.checkout||[]).filter(c => _coDok(c) && String(c.ID||'').trim().toUpperCase() === sid.toUpperCase());
+  const coRows  = coByID.length > 0 ? coByID
+                : sGmail ? (appData.checkout||[]).filter(c => _coDok(c) && String(c.Gmail||'').toLowerCase().trim() === sGmail)
+                : [];
+  const coRow = coRows.length > 0 ? coRows[coRows.length-1] : null; // latest only
+
+  // Helper: extract & normalize HH:MM (24h) from Time field or Timestamp
+  const extractTime = (row) => {
+    if (!row) return null;
+    const _parseT = (raw) => {
+      if (raw === undefined || raw === null || raw === '') return null;
+      const t = String(raw).trim();
+      const m1 = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+      if (m1) return String(parseInt(m1[1])).padStart(2,'0') + ':' + m1[2];
+      const m2 = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+      if (m2) {
+        let h = parseInt(m2[1]);
+        const ap = m2[3].toUpperCase();
+        if (ap==='PM' && h!==12) h+=12;
+        if (ap==='AM' && h===12) h=0;
+        return String(h).padStart(2,'0') + ':' + m2[2];
+      }
+      const num = parseFloat(t);
+      if (!isNaN(num) && num >= 0 && num < 1) {
+        const tm = Math.round(num * 1440);
+        return String(Math.floor(tm/60)).padStart(2,'0') + ':' + String(tm%60).padStart(2,'0');
+      }
+      return null;
+    };
+    const ft = _parseT(row.Time);
+    if (ft) return ft;
+    if (row.Timestamp) {
+      try {
+        const ts = parseInt(row.Timestamp);
+        if (!isNaN(ts) && ts > 1000000000000) {
+          // Timestamp is Unix-ms from client — shift to UTC+7 (Cambodia)
+          const d = new Date(ts + 7 * 3600000);
+          return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
+        }
+      } catch(e){}
+    }
+    return null;
+  };
+
+  // Merge: prefer QR scan data over manual
+  const checkIn  = extractTime(ciRow) || (attRow ? attRow.CheckIn||'-' : '-');
+  const checkOut = extractTime(coRow) || (attRow ? attRow.CheckOut||'-' : '-');
+
+  // LateEarly: QR scan saves LateEarly:'' (server recalculates on its side).
+  // So recalculate locally from actual check-in time vs dept schedule when stored value is empty.
+  // Helper: combine LateEarly + Minutes from QR scan row (server stores them separately)
+  const _fmtLE = (row) => {
+    if (!row) return null;
+    const le = String(row.LateEarly||'').trim();
+    if (!le) return null;
+    const mins = parseInt(row.Minutes||'0');
+    if ((le === 'Late' || le === 'Early') && mins > 0) return le + ' ' + mins + 'min';
+    return le;
+  };
+
+  let late = _fmtLE(ciRow)
+           || (attRow && attRow.Late && attRow.Late !== '-' ? attRow.Late : null);
+  if (!late && ciRow && checkIn && checkIn !== '-') {
+    const _sc   = getDeptSchedule(s.Department||'');
+    const _stM  = timeToMins(_sc.checkIn) || 7*60;
+    const [_ch,_cm] = checkIn.split(':').map(Number);
+    const _ciM  = _ch*60+_cm;
+    late = _ciM > _stM ? 'Late '+(_ciM-_stM)+'min' : 'OnTime';
+  }
+  if (!late) late = '-';
+
+  // Early/OT: combine LateEarly+Minutes from checkout row
+  const _coLE = _fmtLE(coRow);
+  let early = (_coLE && _coLE !== 'OnTime') ? _coLE
+            : (coRow && coRow.LateEarly === 'OnTime') ? 'OnTime'
+            : (attRow && attRow.Early && attRow.Early !== '-') ? attRow.Early
+            : null;
+  if (!early && coRow && checkOut && checkOut !== '-') {
+    const _sc2  = getDeptSchedule(s.Department||'');
+    const _etM  = timeToMins(_sc2.checkOut) || 17*60;
+    const [_oh,_om] = checkOut.split(':').map(Number);
+    const _coM  = _oh*60+_om;
+    if      (_coM < _etM-10) early = 'Early '+(_etM-_coM)+'min';
+    else if (_coM > _etM)    early = 'OT '+(_coM-_etM)+'min';
+    else                     early = 'OnTime';
+  }
+  if (!early) early = '-';
+
+  // Status logic
+  let status = 'Absent';
+  if (checkIn !== '-' && checkIn !== null) {
+    if (late && late !== '-' && late !== 'OnTime' && late.includes('Late')) status = 'Late';
+    else status = 'Present';
+  }
+  if (attRow && attRow.Status === 'Leave') status = 'Leave';
+  if (ciRow) status = (late && late !== '-' && late.includes('Late')) ? 'Late' : 'Present';
+  if (coRow && checkOut !== '-') {
+    // Preserve Late status even after checkout
+    status = (late && late !== '-' && late.includes('Late')) ? 'Late' : 'CheckedOut';
+  }
+
+  return {
+    ID: s.ID, Name: s.Name, Position: s.Position,
+    Department: s.Department, ProjectName: s.ProjectName,
+    CheckIn: checkIn, CheckOut: checkOut,
+    Late: late, Early: early, Status: status,
+    Date: selDate,
+  };
+}
+
 function renderAttendance() {
   const selDate = document.getElementById('attDate').value;
   const q = document.getElementById('attSearch')?.value.toLowerCase() || '';
@@ -2442,136 +2625,7 @@ function renderAttendance() {
     const es = String(s.EmpStatus||s.EmploymentStatus||s['ស្ថានភាពការងារ']||s.emp_status||'').trim();
     return es !== 'បានឈប់' && es !== 'បានព្យួរ';
   });
-  let data = _staffForAtt.map(s => {
-    const sid = String(s.ID).trim();
-
-    // From Attendance sheet (main)
-    const attRow = appData.attendance.find(a =>
-      String(a.ID).trim() === sid && (!selDate || (a.Date||'') === selDate));
-
-    const sGmail = String(s.Gmail||'').toLowerCase().trim();
-
-    // From CheckIn sheet — deduplicated: pick earliest/first match
-    // Priority: ID match first; Gmail only as fallback when no ID match found.
-    // This prevents false positives when multiple staff share the same company Gmail.
-    const _ciDateOk = c => { const d=String(c.Date||c.Timestamp||'').split('T')[0]; return !selDate||d===selDate; };
-    const ciByID  = (appData.checkin||[]).filter(c => _ciDateOk(c) && String(c.ID||'').trim().toUpperCase() === sid.toUpperCase());
-    const ciRows  = ciByID.length > 0 ? ciByID
-                  : sGmail ? (appData.checkin||[]).filter(c => _ciDateOk(c) && String(c.Gmail||'').toLowerCase().trim() === sGmail)
-                  : [];
-    const ciRow = ciRows.length > 0 ? ciRows[0] : null; // earliest only
-
-    // From CheckOut sheet — deduplicated: pick latest/last match
-    const _coDok = c => { const d=String(c.Date||c.Timestamp||'').split('T')[0]; return !selDate||d===selDate; };
-    const coByID  = (appData.checkout||[]).filter(c => _coDok(c) && String(c.ID||'').trim().toUpperCase() === sid.toUpperCase());
-    const coRows  = coByID.length > 0 ? coByID
-                  : sGmail ? (appData.checkout||[]).filter(c => _coDok(c) && String(c.Gmail||'').toLowerCase().trim() === sGmail)
-                  : [];
-    const coRow = coRows.length > 0 ? coRows[coRows.length-1] : null; // latest only
-
-    // Helper: extract & normalize HH:MM (24h) from Time field or Timestamp
-    const extractTime = (row) => {
-      if (!row) return null;
-      const _parseT = (raw) => {
-        if (raw === undefined || raw === null || raw === '') return null;
-        const t = String(raw).trim();
-        const m1 = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-        if (m1) return String(parseInt(m1[1])).padStart(2,'0') + ':' + m1[2];
-        const m2 = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
-        if (m2) {
-          let h = parseInt(m2[1]);
-          const ap = m2[3].toUpperCase();
-          if (ap==='PM' && h!==12) h+=12;
-          if (ap==='AM' && h===12) h=0;
-          return String(h).padStart(2,'0') + ':' + m2[2];
-        }
-        const num = parseFloat(t);
-        if (!isNaN(num) && num >= 0 && num < 1) {
-          const tm = Math.round(num * 1440);
-          return String(Math.floor(tm/60)).padStart(2,'0') + ':' + String(tm%60).padStart(2,'0');
-        }
-        return null;
-      };
-      const ft = _parseT(row.Time);
-      if (ft) return ft;
-      if (row.Timestamp) {
-        try {
-          const ts = parseInt(row.Timestamp);
-          if (!isNaN(ts) && ts > 1000000000000) {
-            // Timestamp is Unix-ms from client — shift to UTC+7 (Cambodia)
-            const d = new Date(ts + 7 * 3600000);
-            return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
-          }
-        } catch(e){}
-      }
-      return null;
-    };
-
-    // Merge: prefer QR scan data over manual
-    const checkIn  = extractTime(ciRow) || (attRow ? attRow.CheckIn||'-' : '-');
-    const checkOut = extractTime(coRow) || (attRow ? attRow.CheckOut||'-' : '-');
-
-    // LateEarly: QR scan saves LateEarly:'' (server recalculates on its side).
-    // So recalculate locally from actual check-in time vs dept schedule when stored value is empty.
-    // Helper: combine LateEarly + Minutes from QR scan row (server stores them separately)
-    const _fmtLE = (row) => {
-      if (!row) return null;
-      const le = String(row.LateEarly||'').trim();
-      if (!le) return null;
-      const mins = parseInt(row.Minutes||'0');
-      if ((le === 'Late' || le === 'Early') && mins > 0) return le + ' ' + mins + 'min';
-      return le;
-    };
-
-    let late = _fmtLE(ciRow)
-             || (attRow && attRow.Late && attRow.Late !== '-' ? attRow.Late : null);
-    if (!late && ciRow && checkIn && checkIn !== '-') {
-      const _sc   = getDeptSchedule(s.Department||'');
-      const _stM  = timeToMins(_sc.checkIn) || 7*60;
-      const [_ch,_cm] = checkIn.split(':').map(Number);
-      const _ciM  = _ch*60+_cm;
-      late = _ciM > _stM ? 'Late '+(_ciM-_stM)+'min' : 'OnTime';
-    }
-    if (!late) late = '-';
-
-    // Early/OT: combine LateEarly+Minutes from checkout row
-    const _coLE = _fmtLE(coRow);
-    let early = (_coLE && _coLE !== 'OnTime') ? _coLE
-              : (coRow && coRow.LateEarly === 'OnTime') ? 'OnTime'
-              : (attRow && attRow.Early && attRow.Early !== '-') ? attRow.Early
-              : null;
-    if (!early && coRow && checkOut && checkOut !== '-') {
-      const _sc2  = getDeptSchedule(s.Department||'');
-      const _etM  = timeToMins(_sc2.checkOut) || 17*60;
-      const [_oh,_om] = checkOut.split(':').map(Number);
-      const _coM  = _oh*60+_om;
-      if      (_coM < _etM-10) early = 'Early '+(_etM-_coM)+'min';
-      else if (_coM > _etM)    early = 'OT '+(_coM-_etM)+'min';
-      else                     early = 'OnTime';
-    }
-    if (!early) early = '-';
-
-    // Status logic
-    let status = 'Absent';
-    if (checkIn !== '-' && checkIn !== null) {
-      if (late && late !== '-' && late !== 'OnTime' && late.includes('Late')) status = 'Late';
-      else status = 'Present';
-    }
-    if (attRow && attRow.Status === 'Leave') status = 'Leave';
-    if (ciRow) status = (late && late !== '-' && late.includes('Late')) ? 'Late' : 'Present';
-    if (coRow && checkOut !== '-') {
-      // Preserve Late status even after checkout
-      status = (late && late !== '-' && late.includes('Late')) ? 'Late' : 'CheckedOut';
-    }
-
-    return {
-      ID: s.ID, Name: s.Name, Position: s.Position,
-      Department: s.Department, ProjectName: s.ProjectName,
-      CheckIn: checkIn, CheckOut: checkOut,
-      Late: late, Early: early, Status: status,
-      Date: selDate,
-    };
-  });
+  let data = _staffForAtt.map(s => computeAttForDate(s, selDate));
 
   // Project filter
   const _projF = (document.getElementById('attProjectFilter')||{}).value || '';
@@ -4485,6 +4539,219 @@ function printAttendancePDF() {
     <script>window.onload = () => { window.print(); }<\/script>
   </body></html>`);
   w.document.close();
+}
+
+// ===== ATTENDANCE — DATE-RANGE REPORT (Menu[វត្តមាន] > របាយការណ៍ខែ) =====
+let _attRptSelected = new Set();
+
+function _attRptEligibleStaff() {
+  // Same "hide resigned/suspended" rule as the main attendance table.
+  return appData.staff.filter(s => {
+    const es = String(s.EmpStatus||s.EmploymentStatus||s['ស្ថានភាពការងារ']||s.emp_status||'').trim();
+    return es !== 'បានឈប់' && es !== 'បានព្យួរ';
+  });
+}
+
+// toISOString() converts to UTC first, which silently rolls a local midnight Date
+// back a day in any UTC+ timezone (e.g. Cambodia, UTC+7) — format from local fields instead.
+function _attRptLocalDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function openAttRangeReport() {
+  const today = new Date();
+  const first = new Date(today.getFullYear(), today.getMonth(), 1);
+  document.getElementById('attRptFrom').value = _attRptLocalDateStr(first);
+  document.getElementById('attRptTo').value   = _attRptLocalDateStr(today);
+  _attRptSelected = new Set();
+  document.querySelector('input[name="attRptMode"][value="all"]').checked = true;
+  attRptSetMode('all');
+  document.getElementById('attRptStaffSearch').value = '';
+  attRptRenderStaffList('');
+  document.getElementById('attRangeReportModal').style.display = 'flex';
+}
+function closeAttRangeReport() {
+  document.getElementById('attRangeReportModal').style.display = 'none';
+}
+function attRptSetMode(mode) {
+  document.getElementById('attRptStaffPicker').style.display = mode === 'select' ? 'block' : 'none';
+  document.getElementById('attRptSelectedCount').textContent =
+    mode === 'select' ? `បានជ្រើសរើស ${_attRptSelected.size} នាក់` : '';
+}
+function attRptRenderStaffList(filterText) {
+  const q = (filterText||'').toLowerCase().trim();
+  const list = _attRptEligibleStaff().filter(s =>
+    !q || String(s.Name||'').toLowerCase().includes(q) || String(s.ID||'').toLowerCase().includes(q));
+  const box = document.getElementById('attRptStaffList');
+  if (!list.length) {
+    box.innerHTML = '<div style="padding:14px;color:#94a3b8;font-size:12px;text-align:center;">រកមិនឃើញបុគ្គលិក...</div>';
+    return;
+  }
+  box.innerHTML = list.map(s => `
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13px;cursor:pointer;border-bottom:1px solid #f1f5f9;">
+      <input type="checkbox" ${_attRptSelected.has(s.ID)?'checked':''} onchange="attRptToggleStaff('${s.ID}',this.checked)">
+      <span style="font-weight:600;color:var(--primary);min-width:56px;">${s.ID}</span>
+      <span>${s.Name||''}</span>
+      <span style="margin-left:auto;color:var(--text2);font-size:11px;">${s.Department||''}</span>
+    </label>`).join('');
+}
+function attRptToggleStaff(id, checked) {
+  if (checked) _attRptSelected.add(id); else _attRptSelected.delete(id);
+  document.getElementById('attRptSelectedCount').textContent = `បានជ្រើសរើស ${_attRptSelected.size} នាក់`;
+}
+function attRptSelectAllVisible(checked) {
+  const q = document.getElementById('attRptStaffSearch').value;
+  const qq = (q||'').toLowerCase().trim();
+  const visible = _attRptEligibleStaff().filter(s =>
+    !qq || String(s.Name||'').toLowerCase().includes(qq) || String(s.ID||'').toLowerCase().includes(qq));
+  visible.forEach(s => { if (checked) _attRptSelected.add(s.ID); else _attRptSelected.delete(s.ID); });
+  attRptRenderStaffList(q);
+  document.getElementById('attRptSelectedCount').textContent = `បានជ្រើសរើស ${_attRptSelected.size} នាក់`;
+}
+
+// Dates within [from,to] where the company actually has activity (checkin/checkout/attendance/leave).
+// Avoids falsely counting weekly off-days as "Absent" — this app has no configured work-week calendar.
+function _attActiveDatesInRange(from, to) {
+  const set = new Set();
+  const inRange = d => d && d >= from && d <= to;
+  (appData.checkin||[]).forEach(c => { const d = String(c.Date||c.Timestamp||'').split('T')[0]; if (inRange(d)) set.add(d); });
+  (appData.checkout||[]).forEach(c => { const d = String(c.Date||c.Timestamp||'').split('T')[0]; if (inRange(d)) set.add(d); });
+  (appData.attendance||[]).forEach(a => { if (inRange(a.Date)) set.add(a.Date); });
+  return [...set].sort();
+}
+
+// Returns {from, to, dates, rows} or null (with a toast) if the form state is invalid/empty.
+function _attRptBuildSummary() {
+  const from = document.getElementById('attRptFrom').value;
+  const to   = document.getElementById('attRptTo').value;
+  if (!from || !to) { showToast('⚠️ សូមជ្រើសរើសចន្លោះកាលបរិច្ឆេទ!', 'warning'); return null; }
+  if (from > to)     { showToast('⚠️ "ចាប់ពី" ត្រូវតែមុន "ដល់"!', 'warning'); return null; }
+
+  const mode = document.querySelector('input[name="attRptMode"]:checked').value;
+  let staffList = _attRptEligibleStaff();
+  if (mode === 'select') {
+    if (!_attRptSelected.size) { showToast('⚠️ សូមជ្រើសរើសបុគ្គលិកយ៉ាងហោចណាស់ម្នាក់!', 'warning'); return null; }
+    staffList = staffList.filter(s => _attRptSelected.has(s.ID));
+  }
+
+  const dates = _attActiveDatesInRange(from, to);
+  if (!dates.length) { showToast('⚠️ គ្មានទិន្នន័យវត្តមានក្នុងចន្លោះកាលបរិច្ឆេទនេះទេ!', 'warning'); return null; }
+
+  const rows = staffList.map(s => {
+    let present = 0, late = 0, checkedout = 0, absent = 0, leave = 0;
+    dates.forEach(d => {
+      const r = computeAttForDate(s, d);
+      if      (r.Status === 'Present')    present++;
+      else if (r.Status === 'Late')       { present++; late++; }
+      else if (r.Status === 'CheckedOut') { present++; checkedout++; }
+      else if (r.Status === 'Leave')      leave++;
+      else                                absent++;
+    });
+    return { ID: s.ID, Name: s.Name, Position: s.Position, Department: s.Department,
+             ProjectName: s.ProjectName, WorkDays: dates.length,
+             Present: present, Late: late, CheckedOut: checkedout, Absent: absent, Leave: leave };
+  });
+
+  return { from, to, dates, rows };
+}
+
+function printAttRangeReport() {
+  const summary = _attRptBuildSummary();
+  if (!summary) return;
+  const { from, to, dates, rows } = summary;
+
+  const totals = rows.reduce((t,r) => ({
+    present: t.present + r.Present, late: t.late + r.Late,
+    absent: t.absent + r.Absent, leave: t.leave + r.Leave
+  }), { present:0, late:0, absent:0, leave:0 });
+
+  const trows = rows.map(r => `<tr>
+    <td><strong>${r.ID}</strong></td>
+    <td>${r.Name}</td>
+    <td>${r.Department||''}</td>
+    <td>${r.ProjectName||''}</td>
+    <td style="text-align:center;">${r.WorkDays}</td>
+    <td style="text-align:center;color:#059669;font-weight:600;">${r.Present}</td>
+    <td style="text-align:center;color:#d97706;">${r.Late}</td>
+    <td style="text-align:center;color:#ef4444;font-weight:600;">${r.Absent}</td>
+    <td style="text-align:center;color:#8b5cf6;">${r.Leave}</td>
+  </tr>`).join('');
+
+  const w = window.open('', '_blank', 'width=1100,height=750');
+  w.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0;}
+      body{font-family:'Kantumruy Pro',sans-serif;padding:28px;background:#fff;color:#1e293b;}
+      .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;border-bottom:2.5px solid #1a3c5e;padding-bottom:14px;}
+      .header-left h2{font-size:20px;color:#1a3c5e;margin-bottom:4px;}
+      .header-left p{font-size:12px;color:#64748b;line-height:1.6;}
+      .header-right{font-size:11px;color:#94a3b8;text-align:right;}
+      .summary{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+      .summary-card{padding:8px 16px;border-radius:8px;font-size:13px;border:1px solid;min-width:110px;text-align:center;}
+      table{width:100%;border-collapse:collapse;font-size:12px;}
+      thead{position:sticky;top:0;}
+      th{background:#1a3c5e;color:#fff;padding:9px 10px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
+      td{padding:8px 10px;border-bottom:1px solid #e2e8f0;vertical-align:middle;}
+      tbody tr:nth-child(even){background:#f8faff;}
+      .footer{margin-top:20px;font-size:11px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:10px;}
+      @media print{
+        body{padding:12px;}
+        thead{display:table-header-group;}
+        tr{page-break-inside:avoid;}
+      }
+    </style>
+  </head><body>
+    <div class="header">
+      <div class="header-left">
+        <h2>📅 របាយការណ៍វត្តមានប្រចាំខែ</h2>
+        <p>
+          ចន្លោះកាលបរិច្ឆេទ: <strong>${formatDateDisplay(from)} — ${formatDateDisplay(to)}</strong> (${dates.length} ថ្ងៃមានទិន្នន័យ)<br>
+          បុគ្គលិក: <strong>${rows.length}</strong> នាក់ | បង្កើត: ${new Date().toLocaleString('km-KH')}
+        </p>
+      </div>
+      <div class="header-right">
+        LHB HR System<br>
+        <span style="font-size:10px;">${new Date().toLocaleDateString('en-GB')}</span>
+      </div>
+    </div>
+
+    <div class="summary">
+      <div class="summary-card" style="background:#d1fae5;border-color:#a7f3d0;color:#065f46;">🟢 វត្តមានសរុប<br><strong style="font-size:20px;">${totals.present}</strong></div>
+      <div class="summary-card" style="background:#fef3c7;border-color:#fde68a;color:#92400e;">⚠️ យឺតសរុប<br><strong style="font-size:20px;">${totals.late}</strong></div>
+      <div class="summary-card" style="background:#fee2e2;border-color:#fca5a5;color:#991b1b;">🔴 អវត្តមានសរុប<br><strong style="font-size:20px;">${totals.absent}</strong></div>
+      <div class="summary-card" style="background:#ede9fe;border-color:#c4b5fd;color:#5b21b6;">🟣 ឈប់សម្រាកសរុប<br><strong style="font-size:20px;">${totals.leave}</strong></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th><th>ឈ្មោះ</th><th>ផ្នែក</th><th>គម្រោង</th>
+          <th style="text-align:center;">ថ្ងៃមានទិន្នន័យ</th><th style="text-align:center;">វត្តមាន</th>
+          <th style="text-align:center;">យឺត</th><th style="text-align:center;">អវត្តមាន</th><th style="text-align:center;">ឈប់សម្រាក</th>
+        </tr>
+      </thead>
+      <tbody>${trows}</tbody>
+    </table>
+
+    <div class="footer">
+      LHB HR Management System · Generated ${new Date().toLocaleString('en-GB')} · Total: ${rows.length} staff · ${dates.length} days
+    </div>
+
+    <script>window.onload = () => { window.print(); }<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
+function exportAttRangeReportCSV() {
+  const summary = _attRptBuildSummary();
+  if (!summary) return;
+  const { from, to, rows } = summary;
+  downloadCSV(
+    toCSV(rows, ['ID','Name','Department','ProjectName','WorkDays','Present','Late','CheckedOut','Absent','Leave']),
+    `attendance_report_${from}_to_${to}.csv`
+  );
+  showToast('✅ Export ' + rows.length + ' បុគ្គលិក ជោគជ័យ!', 'success');
 }
 
 function printLeavePDF() {
