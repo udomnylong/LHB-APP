@@ -1644,6 +1644,22 @@ function registerUnloadHandler() {
   });
 }
 
+// ── Force logout on a dead session (expired TTL, revoked by a login elsewhere, etc.) ──
+// Shared by revalidateSession() (mobile background re-check) and LhbApi.onSessionExpired
+// (fires the instant ANY authenticated call comes back 401 — e.g. a staff Add/Update/Delete
+// that silently would have failed with a generic toast otherwise, per the Staff edit bug report).
+let _forcingLogout = false;
+function forceSessionExpiredLogout() {
+  if (_forcingLogout || !currentUser) return;
+  _forcingLogout = true;
+  console.warn('[Session] Token no longer valid — forcing logout');
+  sessionStorage.removeItem('hrSession');
+  if (_heartbeatInterval) clearInterval(_heartbeatInterval);
+  showToast('⚠️ Session ត្រូវបានផុតកំណត់ — សូម Login ម្ដងទៀត', 'warning');
+  setTimeout(() => location.reload(), 2000);
+}
+LhbApi.onSessionExpired(forceSessionExpiredLogout);
+
 // ── Re-validate session after long background (mobile) ──
 async function revalidateSession() {
   if (!currentUser || !currentUser.sessionToken) return;
@@ -1651,13 +1667,7 @@ async function revalidateSession() {
     const res = await LhbApi.getSession();
     // requireAuth on the server rejects revoked/expired tokens (e.g. an admin
     // reset the device, or another login took over) → force logout locally.
-    if (!res._ok) {
-      console.warn('[Session] Token no longer valid after revalidation — logging out');
-      sessionStorage.removeItem('hrSession');
-      if (_heartbeatInterval) clearInterval(_heartbeatInterval);
-      showToast('⚠️ Session ត្រូវបានផុតកំណត់ — សូម Login ម្ដងទៀត', 'warning');
-      setTimeout(() => location.reload(), 2000);
-    }
+    if (!res._ok) forceSessionExpiredLogout();
   } catch(e) { console.warn('[Revalidate] failed:', e); }
 }
 
@@ -2305,7 +2315,9 @@ async function deleteStaff(id) {
   showLoading(true);
   const ok = await deleteFromSheet(SHEETS.staff, 'ID', id);
   showLoading(false);
-  if (!ok) { showToast('❌ លុបមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  // If the failure was a dead session, forceSessionExpiredLogout() already showed its
+  // own toast and is about to reload to the login screen — don't stomp on that message.
+  if (!ok) { if (!_forcingLogout) showToast('❌ លុបមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   appData.staff = appData.staff.filter(s => s.ID !== id);
   renderStaff();
   populateSelects();
@@ -2442,7 +2454,9 @@ async function saveStaff() {
     ? await updateInSheet(SHEETS.staff, 'ID', row.ID, row)
     : await writeToSheet(SHEETS.staff, row, 'append');
   showLoading(false);
-  if (!ok) { showToast('❌ ' + (isEdit?'កែប្រែ':'បន្ថែម') + ' មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  // If the failure was a dead session, forceSessionExpiredLogout() already showed its
+  // own toast and is about to reload to the login screen — don't stomp on that message.
+  if (!ok) { if (!_forcingLogout) showToast('❌ ' + (isEdit?'កែប្រែ':'បន្ថែម') + ' មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   if (isEdit) appData.staff[idx] = row;
   else appData.staff.push(row);
   closeModal('staffFormModal');
@@ -2717,7 +2731,7 @@ async function deleteLeave(recordId) {
   // shared across every Leave record for that staff.
   const ok = await deleteFromSheet('StaffLeave', 'RecordId', recordId);
   showLoading(false);
-  if (!ok) { showToast('❌ លុបមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  if (!ok) { if (!_forcingLogout) showToast('❌ លុបមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   appData.leave = appData.leave.filter(l => l.RecordId !== recordId);
   renderLeave();
   showToast('🗑️ លុបការឈប់សម្រាកជោគជ័យ!', 'success');
@@ -2740,7 +2754,7 @@ async function saveLeave() {
     ? await updateInSheet(SHEETS.leave, 'RecordId', editingLeaveRecordId, row)
     : await writeToSheet(SHEETS.leave, row, 'append');
   showLoading(false);
-  if (!ok) { showToast('❌ ' + (isLeaveEdit?'កែប្រែ':'ចុះឈ្មោះ') + ' មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  if (!ok) { if (!_forcingLogout) showToast('❌ ' + (isLeaveEdit?'កែប្រែ':'ចុះឈ្មោះ') + ' មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   if (isLeaveEdit) appData.leave[leaveIdx] = { ...row, RecordId: editingLeaveRecordId };
   else appData.leave.push(row);
   editingLeaveRecordId = null;
@@ -2967,7 +2981,7 @@ async function saveOT() {
     ? await updateInSheet('StaffOT', 'RecordId', appData.ot[editingOTIndex].RecordId, row)
     : await writeToSheet('StaffOT', row, 'append');
   showLoading(false);
-  if (!ok) { showToast('❌ ' + (isOTEdit?'កែប្រែ':'បន្ថែម') + ' OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  if (!ok) { if (!_forcingLogout) showToast('❌ ' + (isOTEdit?'កែប្រែ':'បន្ថែម') + ' OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   if (isOTEdit) appData.ot[editingOTIndex] = { ...row, RecordId: appData.ot[editingOTIndex].RecordId };
   else appData.ot.push(row);
   showToast((isOTEdit?'✅ កែប្រែ':'✅ បន្ថែម') + ' OT + Sync ជោគជ័យ!', 'success');
@@ -2993,7 +3007,7 @@ async function deleteOT(idx) {
   showLoading(true);
   const ok = await deleteFromSheet('StaffOT', 'RecordId', row.RecordId);
   showLoading(false);
-  if (!ok) { showToast('❌ លុប OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  if (!ok) { if (!_forcingLogout) showToast('❌ លុប OT មិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   appData.ot.splice(idx, 1);
   renderOT();
   showToast('🗑️ លុប OT ជោគជ័យ', 'success');
@@ -3021,7 +3035,7 @@ async function deleteProject(id) {
   showLoading(true);
   const ok = await deleteFromSheet(SHEETS.project, 'ProjectID', id);
   showLoading(false);
-  if (!ok) { showToast('❌ លុបគម្រោងមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  if (!ok) { if (!_forcingLogout) showToast('❌ លុបគម្រោងមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   appData.project = appData.project.filter(p => p.ProjectID !== id);
   renderProjects();
   populateSelects();
@@ -3062,7 +3076,7 @@ async function saveProject() {
     ? await updateInSheet(SHEETS.project, 'ProjectID', row.ProjectID, row)
     : await writeToSheet(SHEETS.project, row, 'append');
   showLoading(false);
-  if (!ok) { showToast('❌ ' + (isProjEdit?'កែប្រែ':'បន្ថែម') + 'គម្រោងមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
+  if (!ok) { if (!_forcingLogout) showToast('❌ ' + (isProjEdit?'កែប្រែ':'បន្ថែម') + 'គម្រោងមិនបានជោគជ័យ — សូមព្យាយាមម្ដងទៀត', 'warning'); return; }
   if (isProjEdit) appData.project[pidx] = row;
   else appData.project.push(row);
   closeModal('projectFormModal');

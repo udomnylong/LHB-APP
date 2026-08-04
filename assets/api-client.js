@@ -12,6 +12,13 @@
   function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
   function setToken(t) { if (t) sessionStorage.setItem(TOKEN_KEY, t); else sessionStorage.removeItem(TOKEN_KEY); }
 
+  // Host page (hr-system.html) registers this to force a re-login prompt the moment
+  // any authenticated call comes back 401 — e.g. the 10-min server session expired,
+  // or a login elsewhere revoked this session — instead of leaving callers to show a
+  // generic "failed, try again" toast that will just keep failing with the same dead token.
+  let _onUnauthorized = null;
+  function onSessionExpired(cb) { _onUnauthorized = cb; }
+
   async function apiFetch(path, options) {
     options = options || {};
     const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
@@ -28,6 +35,9 @@
       catch (e) { json = { status: 'error', msg: 'Invalid JSON response from API' }; }
       json._httpStatus = res.status;
       json._ok = res.ok;
+      // Only fires for calls that carried a token and got rejected — never for the
+      // login call itself (no token yet) or the intentional pre-login public GETs.
+      if (res.status === 401 && token && _onUnauthorized) _onUnauthorized();
       return json;
     } catch (e) {
       return { status: 'error', msg: e.name === 'AbortError' ? 'Request timed out' : e.message, _ok: false, _httpStatus: 0 };
@@ -148,6 +158,7 @@
     },
     hasToken() { return !!getToken(); },
     clearToken() { setToken(null); },
+    onSessionExpired,
 
     // ── Admin: back up Cloud SQL data for the 8 migrated resources into the Sheet ──
     async backupToSheets() {
