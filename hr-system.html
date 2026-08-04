@@ -2421,7 +2421,20 @@ function openAddStaff(id) {
   }, 150);
 }
 
+let _savingStaff = false;
 async function saveStaff() {
+  // Guard against rapid repeat clicks — showLoading()'s overlay is visual only and
+  // doesn't block the button, so without this a frustrated re-click during the await
+  // below fires a second full save (seen in prod logs as several PUTs per single edit).
+  if (_savingStaff) return;
+  _savingStaff = true;
+  try {
+    await _doSaveStaff();
+  } finally {
+    _savingStaff = false;
+  }
+}
+async function _doSaveStaff() {
   const row = {
     ID: document.getElementById('sf_id').value,
     Name: document.getElementById('sf_name').value,
