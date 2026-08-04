@@ -1729,6 +1729,30 @@ async function fetchSheet(sheetName) {
     console.warn('[HR] LhbApi.getProjects failed:', r.msg);
     return [];
   }
+  if (sheetName === 'Food') {
+    const r = await LhbApi.getFood();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getFood failed:', r.msg);
+    return [];
+  }
+  if (sheetName === 'Comment') {
+    const r = await LhbApi.getComments();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getComments failed:', r.msg);
+    return [];
+  }
+  if (sheetName === 'Workplace' || sheetName === 'WorkPlace') {
+    const r = await LhbApi.getWorkplace();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getWorkplace failed:', r.msg);
+    return [];
+  }
+  if (sheetName === 'EvaluateStaff') {
+    const r = await LhbApi.getEvaluations();
+    if (r._ok) return r.data;
+    console.warn('[HR] LhbApi.getEvaluations failed:', r.msg);
+    return [];
+  }
   // Method 1: Apps Script doGet (primary - handles CORS properly)
   try {
     const url = APPS_SCRIPT_URL + '?action=read&sheet=' + encodeURIComponent(sheetName) + '&t=' + Date.now();
@@ -5459,7 +5483,8 @@ function loadFoodPhotos() {
     const sdate = String(f.Date||'').split('T')[0].trim();
     if(!sid||!sdate) return;
     const key = sid+'_'+sdate;
-    if(!_foodData[key]) _foodData[key]={morning:false,lunch:false,evening:false,photoMorning:'',photoLunch:'',photoEvening:'',comment:''};
+    if(!_foodData[key]) _foodData[key]={morning:false,lunch:false,evening:false,photoMorning:'',photoLunch:'',photoEvening:'',comment:'',recordId:''};
+    if(f.RecordId) _foodData[key].recordId=f.RecordId;
     if(f.Morning==='✓') _foodData[key].morning=true;
     if(f.Lunch  ==='✓') _foodData[key].lunch=true;
     if(f.Evening==='✓') _foodData[key].evening=true;
@@ -5585,12 +5610,12 @@ async function saveFoodData() {
   let staffList   = projFilter ? appData.staff.filter(s=>s.ProjectName===projFilter) : [...appData.staff];
 
   showLoading(true);
-  const rows = [];
-  staffList.forEach(s => {
+  let saved = 0;
+  for (const s of staffList) {
     const key = s.ID + '_' + date;
     const fd  = _foodData[key] || {morning:false, lunch:false, evening:false};
     const meals = (fd.morning?1:0)+(fd.lunch?1:0)+(fd.evening?1:0);
-    rows.push({
+    const row = {
       Date:date, ID:s.ID, Name:cleanName(s.Name), Sex:s.Sex||'', Position:s.Position||'',
       ProjectName:s.ProjectName||'',
       Morning: fd.morning?'✓':'',
@@ -5604,14 +5629,14 @@ async function saveFoodData() {
       PhotoEvening: fd.photoEvening||'',
       Comment: fd.comment||'',
       Remark: 'Manual'
-    });
-  });
-  // Save each row to Food sheet
-  for (const row of rows) {
-    await writeToSheet('Food', row, 'append');
+    };
+    // Update the existing record for this staff+date if one exists, instead of always
+    // appending a new row (the old Sheets-only code duplicated a row every re-save).
+    const res = fd.recordId ? await LhbApi.updateFood(fd.recordId, row) : await LhbApi.createFood(row);
+    if (res._ok) { saved++; if (!fd.recordId && res.id) fd.recordId = String(res.id); }
   }
   showLoading(false);
-  showToast('✅ រក្សាទុកម្ហូប ' + rows.length + ' នាក់ ទៅ Sheet "Food" ជោគជ័យ!', 'success');
+  showToast('✅ រក្សាទុកម្ហូប ' + saved + ' នាក់ ជោគជ័យ!', 'success');
 }
 
 function printFoodPDF() {
@@ -6084,9 +6109,9 @@ async function syncCommentData() {
   if (data && data.length > 0) {
     appData.comment = data;
     renderComment();
-    showToast('✅ Sync Comment ពី GS ជោគជ័យ! (' + data.length + ' រេខ)', 'success');
+    showToast('✅ ទាញយកទិន្នន័យ Comment ជោគជ័យ! (' + data.length + ' រេខ)', 'success');
   } else {
-    showToast('⚠️ Tab Comment ទទេ ឬ មិនអាច Sync', 'warning');
+    showToast('⚠️ គ្មានទិន្នន័យ Comment', 'warning');
   }
   showLoading(false);
 }
@@ -6197,9 +6222,9 @@ async function syncWorkplaceData() {
   if (data && data.length > 0) {
     appData.workplace = data;
     renderWorkplace();
-    showToast('✅ Sync Workplace ពី GS ជោគជ័យ! (' + data.length + ' រេខ)', 'success');
+    showToast('✅ ទាញយកទិន្នន័យ Workplace ជោគជ័យ! (' + data.length + ' រេខ)', 'success');
   } else {
-    showToast('⚠️ Tab Workplace ទទេ ឬ មិនអាច Sync', 'warning');
+    showToast('⚠️ គ្មានទិន្នន័យ Workplace', 'warning');
   }
   showLoading(false);
 }
@@ -6391,7 +6416,7 @@ function renderEvaluate() {
         const diffStr = diff > 0 ? `<small style="color:#16a34a;">(+$${diff.toFixed(2)})</small>`
                       : diff < 0 ? `<small style="color:#dc2626;">(-$${Math.abs(diff).toFixed(2)})</small>` : '';
         return `<tr ondblclick="showEvalDetail(${i})" style="cursor:pointer;">
-          <td><span class="badge badge-blue">${r.EvalNo||''}</span></td>
+          <td><span class="badge badge-blue">${r.RecordId||''}</span></td>
           <td>${r.RequestBy||''}</td>
           <td style="font-weight:600;">${r.StaffName||''}</td>
           <td>${formatDateDisplay(r.DateEvaluate)}</td>
@@ -6410,7 +6435,7 @@ function renderEvaluate() {
 function showEvalDetail(idx) {
   const r = (appData.evaluate||[])[idx]; if (!r) return;
   const diff = Number(r.CurrentSalary||0) - Number(r.PreviousSalary||0);
-  alert(['📊 ព័ត៌មានវាយតម្លៃ',`Eval N°: ${r.EvalNo}`,`Request By: ${r.RequestBy}`,
+  alert(['📊 ព័ត៌មានវាយតម្លៃ',`Eval N°: ${r.RecordId}`,`Request By: ${r.RequestBy}`,
     `Staff: ${r.StaffName} (${r.StaffID})`,`Date: ${formatDateDisplay(r.DateEvaluate)}`,
     `KPI Score: ${r.KPIScore}%`,`Previous Salary: $${Number(r.PreviousSalary||0).toFixed(2)}`,
     `Current Salary: $${Number(r.CurrentSalary||0).toFixed(2)} (${diff>=0?'+':''}$${diff.toFixed(2)})`,
@@ -6421,9 +6446,8 @@ function openAddEvaluate() {
   _evalEditIdx = -1;
   populateEvalStaffSelect();
   document.getElementById('evalFormTitle').textContent = 'វាយតម្លៃបុគ្គលិក';
-  const nextNo = 'EVAL-' + String((appData.evaluate||[]).length + 1).padStart(4,'0');
-  document.getElementById('ev_evalNo').value = nextNo;
-  document.getElementById('ev_evalNoShow').value = nextNo;
+  document.getElementById('ev_evalNo').value = '';
+  document.getElementById('ev_evalNoShow').value = '(នឹងបង្កើតដោយស្វ័យប្រវត្តិ)';
   document.getElementById('ev_requestBy').value = currentUser ? (currentUser.Name||currentUser.Username||'') : '';
   ['ev_staff','ev_kpi','ev_prevSalary','ev_currSalary','ev_approvedBy','ev_remark'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   document.getElementById('ev_date').value = new Date().toISOString().split('T')[0];
@@ -6434,8 +6458,8 @@ function openEditEvaluate(idx) {
   const r = (appData.evaluate||[])[idx]; if (!r) return;
   populateEvalStaffSelect();
   document.getElementById('evalFormTitle').textContent = 'កែប្រែការវាយតម្លៃ';
-  document.getElementById('ev_evalNo').value = r.EvalNo||'';
-  document.getElementById('ev_evalNoShow').value = r.EvalNo||'';
+  document.getElementById('ev_evalNo').value = r.RecordId||'';
+  document.getElementById('ev_evalNoShow').value = r.RecordId||'';
   document.getElementById('ev_requestBy').value = r.RequestBy||'';
   document.getElementById('ev_staff').value = r.StaffID||'';
   document.getElementById('ev_date').value = formatDateInput(r.DateEvaluate);
@@ -6450,10 +6474,9 @@ async function saveEvaluate() {
   const staffId = document.getElementById('ev_staff').value;
   if (!staffId) { showToast('⚠️ សូមជ្រើសរើសបុគ្គលិក','warning'); return; }
   const staff = appData.staff.find(s => s.ID === staffId) || {};
-  const evalNo = document.getElementById('ev_evalNo').value;
   const currSalary = document.getElementById('ev_currSalary').value;
   const row = {
-    EvalNo: evalNo, RequestBy: document.getElementById('ev_requestBy').value,
+    RequestBy: document.getElementById('ev_requestBy').value,
     StaffName: staff.Name||'', StaffID: staffId,
     DateEvaluate: document.getElementById('ev_date').value,
     KPIScore: document.getElementById('ev_kpi').value,
@@ -6462,23 +6485,29 @@ async function saveEvaluate() {
     ApprovedBy: document.getElementById('ev_approvedBy').value,
     Remark: document.getElementById('ev_remark').value
   };
-  if (!evalNo) { showToast('⚠️ Eval N° ត្រូវការ','warning'); return; }
   showLoading(true);
-  if (_evalEditIdx >= 0) {
-    appData.evaluate[_evalEditIdx] = row;
-    await updateInSheet(SHEETS.evaluate, 'EvalNo', row.EvalNo, row);
-    showToast('✅ កែប្រែ + Sync ជោគជ័យ!','success');
+  const existing = _evalEditIdx >= 0 ? (appData.evaluate||[])[_evalEditIdx] : null;
+  const apiRes = existing
+    ? await LhbApi.updateEvaluation(existing.RecordId, row)
+    : await LhbApi.createEvaluation(row);
+  if (!apiRes._ok) {
+    showLoading(false);
+    showToast('❌ '+(apiRes.msg||'រក្សាទុកមិនបានជោគជ័យ'), 'error');
+    return;
+  }
+  if (existing) {
+    appData.evaluate[_evalEditIdx] = { ...row, RecordId: existing.RecordId };
+    showToast('✅ កែប្រែជោគជ័យ!','success');
   } else {
     if (!appData.evaluate) appData.evaluate = [];
-    appData.evaluate.push(row);
-    await writeToSheet(SHEETS.evaluate, row, 'append');
-    showToast('✅ វាយតម្លៃ + Sync ជោគជ័យ!','success');
+    appData.evaluate.push({ ...row, RecordId: String(apiRes.id) });
+    showToast('✅ វាយតម្លៃជោគជ័យ!','success');
   }
   if (currSalary && Number(currSalary) > 0) {
     const sidx = appData.staff.findIndex(s => s.ID === staffId);
     if (sidx >= 0) {
       appData.staff[sidx].Salary = currSalary;
-      await updateInSheet(SHEETS.staff, 'ID', staffId, { Salary: currSalary });
+      await LhbApi.updateStaff(staffId, { Salary: currSalary });
     }
   }
   showLoading(false); _evalEditIdx = -1;
@@ -6487,8 +6516,9 @@ async function saveEvaluate() {
 async function deleteEvaluate(idx) {
   if (!confirm('តើអ្នកចង់លុបការវាយតម្លៃនេះ?')) return;
   const row = (appData.evaluate||[])[idx];
+  const apiRes = await LhbApi.deleteEvaluation(row.RecordId);
+  if (!apiRes._ok) { showToast('❌ '+(apiRes.msg||'លុបមិនបានជោគជ័យ'), 'error'); return; }
   appData.evaluate.splice(idx, 1);
-  await deleteFromSheet(SHEETS.evaluate, 'EvalNo', row.EvalNo);
   renderEvaluate(); showToast('🗑️ លុបជោគជ័យ','success');
 }
 function printEvaluatePDF() {

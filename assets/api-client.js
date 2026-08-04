@@ -1,8 +1,7 @@
 // Shared Cloud Run API client for hr-system.html / staff-portal.html.
-// Phases 2-3 of the Sheets -> Cloud SQL migration: auth, staff, check-in/out
-// +attendance, and now Leave/OT/Project (see LhbApi.MIGRATED_SHEETS). The
-// remaining sheets (Food, WorkPlace, Comment, EvaluateStaff) still go through
-// the Apps Script URL each HTML file already has.
+// All 12 sheets are now migrated onto Cloud Run/Postgres (see LhbApi.MIGRATED_SHEETS).
+// The Apps Script URL each HTML file still has is now used only for Google Drive photo
+// upload/replace calls, not for any data read/write.
 //
 // Override with window.LHB_API_BASE (set via a <script> tag before this file
 // loads) for local dev/testing against a different backend.
@@ -82,6 +81,22 @@
     ProjectID: 'project_id', ProjectName: 'project_name', Location: 'location',
     Latitude: 'latitude', Longitude: 'longitude', Radius: 'radius', Status: 'status',
   };
+  const FOOD_FIELD_MAP = {
+    Date: 'date', ID: 'staff_code', Name: 'name', Sex: 'sex', Position: 'position', ProjectName: 'project_name',
+    Morning: 'morning', Lunch: 'lunch', Evening: 'evening', Total: 'total', UnitPrice: 'unit_price', TotalPrice: 'total_price',
+    PhotoMorning: 'photo_morning_url', PhotoLunch: 'photo_lunch_url', PhotoEvening: 'photo_evening_url',
+    Comment: 'comment', Remark: 'remark',
+  };
+  // Comment / WorkPlace sheets share the same shape.
+  const REPORT_FIELD_MAP = {
+    Date: 'date', Time: 'time', ID: 'staff_code', Department: 'department',
+    ProjectName: 'project_name', Comment: 'comment', Photo: 'photo_url', Status: 'status',
+  };
+  const EVALUATE_FIELD_MAP = {
+    RequestBy: 'request_by', StaffID: 'staff_code', StaffName: 'staff_name', DateEvaluate: 'date_evaluate',
+    KPIScore: 'kpi_score', PreviousSalary: 'previous_salary', CurrentSalary: 'current_salary',
+    ApprovedBy: 'approved_by', Remark: 'remark',
+  };
 
   function mapRowToApi(fieldMap, row) {
     const out = {};
@@ -104,7 +119,7 @@
   const LhbApi = {
     // Resources fully migrated off Apps Script as of Phase 2 — callers use this
     // to decide whether to route a given sheet name through LhbApi or the old URL.
-    MIGRATED_SHEETS: ['User', 'StaffInfo', 'CheckIn', 'CheckOut', 'Attendance', 'StaffLeave', 'StaffOT', 'Project'],
+    MIGRATED_SHEETS: ['User', 'StaffInfo', 'CheckIn', 'CheckOut', 'Attendance', 'StaffLeave', 'StaffOT', 'Project', 'Food', 'Comment', 'Workplace', 'EvaluateStaff'],
 
     // ── Auth ──
     async login(username, password) {
@@ -223,8 +238,76 @@
       return apiFetch('/api/projects/' + encodeURIComponent(projectId), { method: 'DELETE' });
     },
 
-    // ── Attendance (real-time check-in/out; NOT for manual/backfill admin edits —
-    // those stay on Apps Script, see the migration plan) ──
+    // ── Food (sheet-shaped in/out, see FOOD_FIELD_MAP; photos stay on Google Drive —
+    // callers pass the resulting Drive URL in PhotoMorning/PhotoLunch/PhotoEvening) ──
+    async getFood(params) {
+      const qs = new URLSearchParams(params || {}).toString();
+      const r = await apiFetch('/api/food' + (qs ? '?' + qs : ''), { method: 'GET' });
+      if (r._ok && Array.isArray(r.data)) r.data = r.data.map((row) => mapApiToRow(FOOD_FIELD_MAP, row, { RecordId: String(row.id) }));
+      return r;
+    },
+    async createFood(sheetRow) {
+      return apiFetch('/api/food', { method: 'POST', body: JSON.stringify(mapRowToApi(FOOD_FIELD_MAP, sheetRow)) });
+    },
+    async updateFood(recordId, sheetRow) {
+      return apiFetch('/api/food/' + encodeURIComponent(recordId), { method: 'PUT', body: JSON.stringify(mapRowToApi(FOOD_FIELD_MAP, sheetRow)) });
+    },
+    async deleteFood(recordId) {
+      return apiFetch('/api/food/' + encodeURIComponent(recordId), { method: 'DELETE' });
+    },
+
+    // ── Comment / WorkPlace reports (sheet-shaped in/out, see REPORT_FIELD_MAP) ──
+    async getComments(params) {
+      const qs = new URLSearchParams(params || {}).toString();
+      const r = await apiFetch('/api/comments' + (qs ? '?' + qs : ''), { method: 'GET' });
+      if (r._ok && Array.isArray(r.data)) r.data = r.data.map((row) => mapApiToRow(REPORT_FIELD_MAP, row, { RecordId: String(row.id) }));
+      return r;
+    },
+    async createComment(sheetRow) {
+      return apiFetch('/api/comments', { method: 'POST', body: JSON.stringify(mapRowToApi(REPORT_FIELD_MAP, sheetRow)) });
+    },
+    async updateComment(recordId, sheetRow) {
+      return apiFetch('/api/comments/' + encodeURIComponent(recordId), { method: 'PUT', body: JSON.stringify(mapRowToApi(REPORT_FIELD_MAP, sheetRow)) });
+    },
+    async deleteComment(recordId) {
+      return apiFetch('/api/comments/' + encodeURIComponent(recordId), { method: 'DELETE' });
+    },
+    async getWorkplace(params) {
+      const qs = new URLSearchParams(params || {}).toString();
+      const r = await apiFetch('/api/workplace' + (qs ? '?' + qs : ''), { method: 'GET' });
+      if (r._ok && Array.isArray(r.data)) r.data = r.data.map((row) => mapApiToRow(REPORT_FIELD_MAP, row, { RecordId: String(row.id) }));
+      return r;
+    },
+    async createWorkplace(sheetRow) {
+      return apiFetch('/api/workplace', { method: 'POST', body: JSON.stringify(mapRowToApi(REPORT_FIELD_MAP, sheetRow)) });
+    },
+    async updateWorkplace(recordId, sheetRow) {
+      return apiFetch('/api/workplace/' + encodeURIComponent(recordId), { method: 'PUT', body: JSON.stringify(mapRowToApi(REPORT_FIELD_MAP, sheetRow)) });
+    },
+    async deleteWorkplace(recordId) {
+      return apiFetch('/api/workplace/' + encodeURIComponent(recordId), { method: 'DELETE' });
+    },
+
+    // ── Staff evaluations (sheet-shaped in/out, see EVALUATE_FIELD_MAP; the old
+    // client-generated EvalNo label is gone — RecordId, the real Postgres id, is the key) ──
+    async getEvaluations(params) {
+      const qs = new URLSearchParams(params || {}).toString();
+      const r = await apiFetch('/api/evaluations' + (qs ? '?' + qs : ''), { method: 'GET' });
+      if (r._ok && Array.isArray(r.data)) r.data = r.data.map((row) => mapApiToRow(EVALUATE_FIELD_MAP, row, { RecordId: String(row.id) }));
+      return r;
+    },
+    async createEvaluation(sheetRow) {
+      return apiFetch('/api/evaluations', { method: 'POST', body: JSON.stringify(mapRowToApi(EVALUATE_FIELD_MAP, sheetRow)) });
+    },
+    async updateEvaluation(recordId, sheetRow) {
+      return apiFetch('/api/evaluations/' + encodeURIComponent(recordId), { method: 'PUT', body: JSON.stringify(mapRowToApi(EVALUATE_FIELD_MAP, sheetRow)) });
+    },
+    async deleteEvaluation(recordId) {
+      return apiFetch('/api/evaluations/' + encodeURIComponent(recordId), { method: 'DELETE' });
+    },
+
+    // ── Attendance (real-time check-in/out; manualCheckIn/manualCheckOut below cover
+    // admin backfill/correction edits) ──
     async checkIn({ staffCode, projectName, latitude, longitude, accuracy }) {
       return apiFetch('/api/checkins', {
         method: 'POST',

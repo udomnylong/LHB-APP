@@ -623,41 +623,36 @@ async function submitFood(){
     Comment:    comment,
     Remark:     'QR-Scan'
   };
+  var photoKey={m:'photoMorning',l:'photoLunch',e:'photoEvening'};
+  var photoField={m:'PhotoMorning',l:'PhotoLunch',e:'PhotoEvening'};
 
-  var payload=JSON.stringify({
-    action:'appendWithPhotos',
-    sheet:'Food',
-    folderId:FOLDER_ID,
-    data:row, photos:photos, fileNames:fileNames
-  });
-
-  // Log payload size
-  console.log('[Submit] Payload size:', Math.round(payload.length/1024)+'KB');
   try{
-    var r=await fetch(SU,{method:'POST',mode:'cors',
-      redirect:'follow',
-      headers:{'Content-Type':'text/plain'},body:payload});
-    console.log('[Submit] Response status:', r.status, r.url.slice(-30));
-    var txt=await r.text();
-    console.log('[Submit] Response:', txt.slice(0,200));
-    var j=JSON.parse(txt);
-    if(j.status==='ok'){
-      // Update local preview to Drive URLs
-      if(j.photoMorning){photoURL.m=j.photoMorning;if(document.getElementById('imgm'))document.getElementById('imgm').src=j.photoMorning;setSt('m','✅ Drive OK!','#059669');}
-      if(j.photoLunch)  {photoURL.l=j.photoLunch;  if(document.getElementById('imgl'))document.getElementById('imgl').src=j.photoLunch;  setSt('l','✅ Drive OK!','#059669');}
-      if(j.photoEvening){photoURL.e=j.photoEvening; if(document.getElementById('imge'))document.getElementById('imge').src=j.photoEvening; setSt('e','✅ Drive OK!','#059669');}
-      showResult(total,totalP,date,comment);
-    } else {
-      throw new Error(j.msg||'Server error');
-    }
+    // Photos still go to Google Drive (one uploadPhoto call per photo) — only the
+    // resulting URLs + the rest of the row are persisted, and they go straight to
+    // Postgres now instead of the Food sheet.
+    await Promise.all(['m','l','e'].map(async function(t){
+      var k=photoKey[t];
+      if(!(meals[t]&&photos[k])) return;
+      var r=await fetch(SU,{method:'POST',mode:'cors',redirect:'follow',
+        headers:{'Content-Type':'text/plain'},
+        body:JSON.stringify({action:'uploadPhoto',base64:photos[k],mimeType:'image/jpeg',fileName:fileNames[k],folderId:FOLDER_ID})});
+      var j=await r.json();
+      if(j.status==='ok'&&j.url){
+        row[photoField[t]]=j.url;
+        photoURL[t]=j.url;
+        var img=document.getElementById('img'+t); if(img) img.src=j.url;
+        setSt(t,'✅ Drive OK!','#059669');
+      } else {
+        setSt(t,'⚠️ Upload failed','#dc2626');
+      }
+    }));
+
+    var apiRes=await LhbApi.createFood(row);
+    if(!apiRes._ok) throw new Error(apiRes.msg||'Server error');
+    showResult(total,totalP,date,comment);
   }catch(e){
     console.error('Submit error:',e.message);
-    // Fallback: save text data only (no photos) via no-cors
-    toast('⚠️ Photos skip — Saving text data...',3000);
-    fetch(SU,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'append',sheet:'Food',data:row})});
-    await sleep(1500);
-    showResult(total,totalP,date,comment);
+    toast('❌ '+(e.message||'បញ្ជូនមិនបានជោគជ័យ'),4000);
   }
 
   showLd(false);

@@ -2082,11 +2082,13 @@ async function submitReport(sheetName, prefix) {
 
     const row = {
       Date: date, Time: time,
-      ID: currentStaff.ID, Name: currentStaff.Name,
+      ID: currentStaff.ID,
       Department: currentStaff.Department||'', ProjectName: currentStaff.ProjectName||'',
       Comment: text, Photo: photoUrl, Status: 'New'
     };
-    await postData({ action:'append', sheet:sheetName, data:row });
+    const submitFn = sheetName === 'Comment' ? LhbApi.createComment : LhbApi.createWorkplace;
+    const r = await submitFn(row);
+    if (!r._ok) throw new Error(r.msg || 'Submit failed');
     showToast('✅ ដាក់ស្នើជោគជ័យ!','ok');
     closeModal(prefix + 'Modal');
     if (comment) comment.value = '';
