@@ -4615,7 +4615,7 @@ function _attActiveDatesInRange(from, to) {
   const inRange = d => d && d >= from && d <= to;
   (appData.checkin||[]).forEach(c => { const d = String(c.Date||c.Timestamp||'').split('T')[0]; if (inRange(d)) set.add(d); });
   (appData.checkout||[]).forEach(c => { const d = String(c.Date||c.Timestamp||'').split('T')[0]; if (inRange(d)) set.add(d); });
-  (appData.attendance||[]).forEach(a => { if (inRange(a.Date)) set.add(a.Date); });
+  (appData.attendance||[]).forEach(a => { const d = String(a.Date||'').split('T')[0]; if (inRange(d)) set.add(d); });
   return [...set].sort();
 }
 
