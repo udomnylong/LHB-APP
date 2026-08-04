@@ -1947,12 +1947,13 @@ async function submitLeave() {
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> កំពុង Submit...';
 
   const row = {
-    ID: currentStaff.ID, Name: currentStaff.Name,
+    ID: currentStaff.ID,
     TypeOfLeave: type, StartDate: from, EndDate: to,
     Days: days, Reason: reason, Status: 'Pending'
   };
   try {
-    await postData({ action:'append', sheet:'StaffLeave', data:row });
+    const r = await LhbApi.createLeave(row);
+    if (!r._ok) throw new Error(r.msg || 'Submit failed');
     showToast('✅ ស្នើសុំច្បាប់ជោគជ័យ!','ok');
     closeModal('leaveModal');
     loadLeaveBalance(currentStaff.ID);
@@ -1978,13 +1979,12 @@ async function submitOT() {
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> កំពុង Submit...';
 
   const row = {
-    ID: currentStaff.ID, Name: currentStaff.Name,
-    Date: date, Hours: hours,
-    TimeFrom: from, TimeTo: to,
-    TypeOfWork: type, Reason: reason, Status: 'Pending'
+    ID: currentStaff.ID, Date: date, Hours: hours,
+    TypeOfWork: type, Remark: reason, Status: 'Pending'
   };
   try {
-    await postData({ action:'append', sheet:'StaffOT', data:row });
+    const r = await LhbApi.createOT(row);
+    if (!r._ok) throw new Error(r.msg || 'Submit failed');
     showToast('✅ ស្នើសុំ OT ជោគជ័យ!','ok');
     closeModal('otModal');
     document.getElementById('ot_reason').value = '';

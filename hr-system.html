@@ -5227,74 +5227,36 @@ async function tpSave() {
   const isCI   = _tpType==='checkin';
   const _tpp   = time.split(':').map(Number);
   const tot    = _tpp[0]*60+_tpp[1];
-  // Use dept-specific schedule for lateEarly calculation
+  // Use dept-specific schedule for the lateEarly label shown in the toast (the server
+  // computes its own authoritative Late/Present status against a fixed cutoff).
   const _sched  = (typeof getDeptSchedule === 'function')
     ? getDeptSchedule(s.Department || '')
     : { checkIn:'07:00', checkOut:'17:00' };
   const _stMins = (typeof timeToMins === 'function') ? (timeToMins(_sched.checkIn)  || 7*60)  : 7*60;
   const _etMins = (typeof timeToMins === 'function') ? (timeToMins(_sched.checkOut) || 17*60) : 17*60;
-  let lateEarly = 'OnTime', status = 'Present';
+  let lateEarly = 'OnTime';
   if (isCI) {
-    if (tot > _stMins) { lateEarly = 'Late '+(tot-_stMins)+'min'; status = 'Late'; }
+    if (tot > _stMins) lateEarly = 'Late '+(tot-_stMins)+'min';
   } else {
     if      (tot < _etMins-10) lateEarly = 'Early '+(  _etMins-tot)+'min';
     else if (tot > _etMins)    lateEarly = 'OT '   +(tot-_etMins  )+'min';
   }
-  // Build Timestamp from entered date+time (not save-button click time)
-  let _tsISO;
-  try {
-    const [_yy,_mm,_dd] = date.split('-').map(Number);
-    const [_hh,_mn]     = time.split(':').map(Number);
-    _tsISO = new Date(_yy, _mm-1, _dd, _hh, _mn, 0).toISOString();
-  } catch(e) { _tsISO = new Date().toISOString(); }
-
-  const row = {
-    ID:s.ID, Name:s.Name, Gmail:s.Gmail||'', ProjectName:s.ProjectName||'',
-    Date:date, Time:time, Timestamp:_tsISO,
-    Latitude:'', Longitude:'', Accuracy:'Manual',
-    LateEarly:lateEarly, Minutes:'0', Position:s.Position||'', Department:s.Department||''
-  };
-  const sheetName = isCI ? 'CheckIn' : 'CheckOut';
-  const hdrs = ['ID','Name','Gmail','ProjectName','Date','Time','Timestamp','Latitude','Longitude','Accuracy','LateEarly','Minutes','Position','Department'];
 
   closeTp();
   showLoading(true);
-  // Overwrite: delete old record then append fresh (prevents duplicates in Sheet)
-  // Send delete first for this staff+date, then append
-  fetch(APPS_SCRIPT_URL, {
-    method:'POST', mode:'no-cors',
-    body: JSON.stringify({
-      action: 'deleteByIdDate',
-      sheet: sheetName,
-      keyId: row.ID,
-      keyDate: date
-    }),
-    headers: {'Content-Type':'text/plain'}
-  }).catch(()=>{});
-  // Small delay then append
-  await new Promise(r=>setTimeout(r,300));
-  await writeToSheet(sheetName, row, 'append');
+  const apiRes = await (isCI ? LhbApi.manualCheckIn : LhbApi.manualCheckOut)({
+    staffCode: s.ID, projectName: s.ProjectName||'', date, time,
+  });
+  if (!apiRes._ok) { showLoading(false); showToast('❌ '+(apiRes.msg||'រក្សាទុកមិនបានជោគជ័យ'), 'error'); return; }
 
-  // Upsert Attendance
-  const aR={ID:row.ID,Name:row.Name,Position:row.Position,Department:row.Department,ProjectName:row.ProjectName,Date:date,
-    CheckIn:isCI?time:'',CheckOut:!isCI?time:'',Late:isCI?lateEarly:'',Early:!isCI?lateEarly:'',Status:status};
-  fetch(APPS_SCRIPT_URL,{method:'POST',mode:'no-cors',
-    body:JSON.stringify({action:'upsert',sheet:'Attendance',keyField:'ID',keyValue:row.ID,keyDate:date,type:_tpType,data:aR,
-      row:['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date'].map(k=>aR[k]||''),
-      headers:['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date']}),
-    headers:{'Content-Type':'text/plain'}}).catch(()=>{});
-
-  // Update local
-  const _sid2 = String(s.ID).trim().toUpperCase();
-  if(isCI){
-    if(!appData.checkin) appData.checkin=[];
-    appData.checkin=appData.checkin.filter(c=>!(String(c.ID||'').trim().toUpperCase()===_sid2 && String(c.Date||c.Timestamp||'').split('T')[0]===date));
-    appData.checkin.push(row);
-  }else{
-    if(!appData.checkout) appData.checkout=[];
-    appData.checkout=appData.checkout.filter(c=>!(String(c.ID||'').trim().toUpperCase()===_sid2 && String(c.Date||c.Timestamp||'').split('T')[0]===date));
-    appData.checkout.push(row);
-  }
+  // Refresh CheckIn/CheckOut/Attendance from the server instead of hand-building a local
+  // row — the server is now the single source of truth (no more Sheets round-trip).
+  const [ciData, coData, attData] = await Promise.all([
+    fetchSheet(SHEETS.checkin), fetchSheet(SHEETS.checkout), fetchSheet(SHEETS.attendance),
+  ]);
+  if (ciData)  appData.checkin    = ciData;
+  if (coData)  appData.checkout   = coData;
+  if (attData) appData.attendance = attData;
   showLoading(false);
   renderAttendance();
   showToast('✅ '+(isCI?'Check In':'Check Out')+' '+s.Name+' — '+time+' ('+lateEarly+')', 'success');
@@ -5384,139 +5346,24 @@ async function saveManualAtt() {
   const s = appData.staff.find(x=>x.ID===staffId);
   if (!s) return;
 
-  // Calculate late/early using dept-specific schedule
-  const [h,m] = time.split(':').map(Number), tot=h*60+m;
-  const _sched = getDeptSchedule(s.Department||'');
-  const _stMin = timeToMins(_sched.checkIn)  || 7*60+15;
-  const _etMin = timeToMins(_sched.checkOut) || 17*60;
-  let lateEarly = 'OnTime', status = 'Present';
-  if (manualAttType === 'checkin') {
-    if(tot>_stMin){lateEarly='Late '+(tot-_stMin)+'min'; status='Late';}
-  } else {
-    if(tot<_etMin-10) lateEarly='Early '+(_etMin-tot)+'min';
-    else if(tot>_etMin) lateEarly='OT '+(tot-_etMin)+'min';
-  }
-
-  const row = {
-    ID:s.ID, Name:s.Name, Gmail:s.Gmail||'', ProjectName:projName,
-    Date:date, Time:time, Timestamp:new Date().toISOString(),
-    Latitude:'', Longitude:'', Accuracy:'Manual',
-    LateEarly:lateEarly, Minutes:'0', Position:s.Position||'', Department:s.Department||''
-  };
-
-  const sheetName = manualAttType==='checkin' ? 'CheckIn' : 'CheckOut';
-  const hdrs = ['ID','Name','Gmail','ProjectName','Date','Time','Timestamp','Latitude','Longitude','Accuracy','LateEarly','Minutes','Position','Department'];
-
   showLoading(true);
+  const apiRes = await (manualAttType==='checkin' ? LhbApi.manualCheckIn : LhbApi.manualCheckOut)({
+    staffCode: s.ID, projectName: projName, date, time,
+  });
+  if (!apiRes._ok) { showLoading(false); showToast('❌ '+(apiRes.msg||'រក្សាទុកមិនបានជោគជ័យ'), 'error'); return; }
 
-  // Step 1: Save to CheckIn or CheckOut sheet only
-  const hdrs2 = ['ID','Name','Gmail','ProjectName','Date','Time','Timestamp','Latitude','Longitude','Accuracy','LateEarly','Minutes','Position','Department'];
-  await writeToSheet(sheetName, row, 'append');
-
-  // Step 2: Upsert Attendance sheet (update existing row, don't append new)
-  const attRow = {
-    ID:row.ID, Name:row.Name, Position:row.Position, Department:row.Department,
-    ProjectName:row.ProjectName, Date:date,
-    CheckIn:  manualAttType==='checkin'  ? time : '',
-    CheckOut: manualAttType==='checkout' ? time : '',
-    Late:     manualAttType==='checkin'  ? lateEarly : '',
-    Early:    manualAttType==='checkout' ? lateEarly : '',
-    Status:   status,
-  };
-  const aHdrs=['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date'];
-  // Use upsert — find existing row by ID+Date, update; else append
-  await fetch(APPS_SCRIPT_URL, {
-    method:'POST', mode:'no-cors',
-    body: JSON.stringify({
-      action:'upsert', sheet:'Attendance',
-      keyField:'ID', keyValue:row.ID, keyDate:date,
-      type: manualAttType,
-      data: attRow,
-      row: aHdrs.map(h=>attRow[h]||''),
-      headers: aHdrs
-    }),
-    headers:{'Content-Type':'text/plain'}
-  }).catch(()=>{});
-
-  // Step 3: Update local appData only (no duplicate)
-  if (manualAttType==='checkin') {
-    if (!appData.checkin) appData.checkin=[];
-    // Remove old entry for same ID+Date before adding
-    appData.checkin = appData.checkin.filter(c=>!(c.ID===row.ID && c.Date===date));
-    appData.checkin.push(row);
-  } else {
-    if (!appData.checkout) appData.checkout=[];
-    appData.checkout = appData.checkout.filter(c=>!(c.ID===row.ID && c.Date===date));
-    appData.checkout.push(row);
-  }
+  // Refresh CheckIn/CheckOut/Attendance from the server (single source of truth now).
+  const [ciData, coData, attData] = await Promise.all([
+    fetchSheet(SHEETS.checkin), fetchSheet(SHEETS.checkout), fetchSheet(SHEETS.attendance),
+  ]);
+  if (ciData)  appData.checkin    = ciData;
+  if (coData)  appData.checkout   = coData;
+  if (attData) appData.attendance = attData;
 
   showLoading(false);
   closeModal('manualAttModal');
   renderAttendance();
   showToast('✅ '+(manualAttType==='checkin'?'Check In':'Check Out')+' '+s.Name+' ជោគជ័យ! ⏰'+time, 'success');
-}
-
-async function checkInAll() {
-  if (!confirm('Check In បុគ្គលិកទាំងអស់ (' + appData.staff.length + ' នាក់)?')) return;
-  const now = new Date();
-  const time = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-  const date = now.toISOString().split('T')[0];
-  const tot = now.getHours()*60+now.getMinutes();
-  showLoading(true);
-  if (!appData.checkin) appData.checkin=[];
-  // Remove all today's checkin first (dedup)
-  appData.checkin = appData.checkin.filter(c=>c.Date!==date);
-  const batchRows = [];
-  for (const s of appData.staff) {
-    const _sc = getDeptSchedule(s.Department||'');
-    const _st = timeToMins(_sc.checkIn) || 7*60+15;
-    const lateEarly = tot>_st ? 'Late '+(tot-_st)+'min' : 'OnTime';
-    const status = tot>_st ? 'Late' : 'Present';
-    const row = {
-      ID:s.ID, Name:s.Name, Gmail:s.Gmail||'', ProjectName:s.ProjectName||'',
-      Date:date, Time:time, Timestamp:now.toISOString(),
-      Latitude:'', Longitude:'', Accuracy:'Manual-All',
-      LateEarly:lateEarly, Minutes:'0', Position:s.Position||'', Department:s.Department||''
-    };
-    appData.checkin.push(row);
-    batchRows.push(row);
-  }
-  // Write all to CheckIn sheet (batch)
-  for (const row of batchRows) {
-    writeToSheet('CheckIn', row, 'append'); // fire-and-forget
-  }
-  showLoading(false);
-  renderAttendance();
-  showToast('✅ Check In All '+appData.staff.length+' នាក់ — '+time, 'success');
-}
-
-async function checkOutAll() {
-  if (!confirm('Check Out បុគ្គលិកទាំងអស់ (' + appData.staff.length + ' នាក់)?')) return;
-  const now = new Date();
-  const time = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-  const date = now.toISOString().split('T')[0];
-  const tot = now.getHours()*60+now.getMinutes();
-  showLoading(true);
-  if (!appData.checkout) appData.checkout=[];
-  appData.checkout = appData.checkout.filter(c=>c.Date!==date);
-  for (const s of appData.staff) {
-    const _sc = getDeptSchedule(s.Department||'');
-    const _et = timeToMins(_sc.checkOut) || 17*60;
-    const lateEarly = tot<_et-10 ? 'Early '+(_et-tot)+'min' : tot>_et ? 'OT '+(tot-_et)+'min' : 'OnTime';
-    const row = {
-      ID:s.ID, Name:s.Name, Gmail:s.Gmail||'', ProjectName:s.ProjectName||'',
-      Date:date, Time:time, Timestamp:now.toISOString(),
-      Latitude:'', Longitude:'', Accuracy:'Manual-All',
-      LateEarly:lateEarly, Minutes:'0', Position:s.Position||'', Department:s.Department||''
-    };
-    appData.checkout.push(row);
-    await writeToSheet('CheckOut', row, 'append');
-  }
-  const cacheKey2 = 'hr_co_cache_'+date;
-  localStorage.setItem(cacheKey2, JSON.stringify(appData.checkout.filter(c=>c.Date===date)));
-  showLoading(false);
-  renderAttendance();
-  showToast('✅ Check Out All '+appData.staff.length+' នាក់ — '+time+' | Synced ✅', 'success');
 }
 
 // ========== FOOD UNIT PRICE MEMORY ==========

@@ -29,9 +29,12 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ status: 'ok', data: rows });
 }));
 
-router.use(requireAuth);
-
-// POST /api/ot — create
+// POST /api/ot — create. Public, no auth: staff-portal.html's self-service OT
+// request (the primary caller) has no session/token concept at all, same as
+// attendance.js's /checkins /checkouts (see the comment there). Bounded safely
+// because a created record always starts life as staff_code-owned with whatever
+// status the caller sends (the UI always sends 'Pending') — approving/editing/
+// deleting still requires a real admin token via the routes below.
 router.post('/', asyncHandler(async (req, res) => {
   const row = req.body || {};
   if (!row.staff_code) return res.status(400).json({ status: 'error', msg: 'staff_code required' });
@@ -44,6 +47,8 @@ router.post('/', asyncHandler(async (req, res) => {
   );
   res.json({ status: 'ok', id: rows[0].id });
 }));
+
+router.use(requireAuth);
 
 // PUT /api/ot/:id — partial update by numeric id (real PK — replaces the old ID-only matching,
 // which used the *staff* ID and could silently hit the wrong row for a staff with 2+ OT records)

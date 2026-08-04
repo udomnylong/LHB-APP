@@ -3,6 +3,7 @@ const { pool, withTransaction } = require('../db');
 const asyncHandler = require('../asyncHandler');
 const { phNow, phDateStr, phTimeStr, phTimeStrFull } = require('../phTime');
 const { sendTelegramMessage } = require('../telegramClient');
+const { requireAuth } = require('../middleware/auth');
 
 // No requireAuth here, on purpose: staff-portal.html's check-in (the primary caller)
 // has no session/token concept at all — its "login" is a client-side Gmail+phone
@@ -26,7 +27,7 @@ function toNum(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-async function recordEvent({ table, staffCode, req, res }) {
+async function recordEvent({ table, staffCode, req, res, manualDate, manualTime }) {
   const staffCodeTrim = String(staffCode || '').trim();
   if (!staffCodeTrim) return res.status(400).json({ status: 'error', msg: 'staff_code required' });
 
@@ -34,10 +35,15 @@ async function recordEvent({ table, staffCode, req, res }) {
   const staff = staffResult.rows[0];
   if (!staff) return res.status(404).json({ status: 'error', msg: 'Staff not found: ' + staffCodeTrim });
 
-  const now = phNow();
-  const eventDate = phDateStr(now);
-  const eventTime = phTimeStr(now);
-  const eventTimestamp = new Date(); // real instant, TIMESTAMPTZ column
+  // manualDate/manualTime (admin backfill/correction) override the real-time clock —
+  // everyone else (the public self-check-in path) keeps using server time on purpose,
+  // as an anti-tamper measure (mirrors Code.gs's enforceServerTime_).
+  const now = manualDate && manualTime ? null : phNow();
+  const eventDate = manualDate || phDateStr(now);
+  const eventTime = manualTime || phTimeStr(now);
+  const eventTimestamp = manualDate && manualTime
+    ? new Date(`${manualDate}T${manualTime}:00+07:00`)
+    : new Date(); // real instant, TIMESTAMPTZ column
   const totalMin = minutesOf(eventTime);
   const projectName = String(req.body.project_name || staff.project_name || '');
   const latitude = toNum(req.body.latitude);
@@ -99,6 +105,28 @@ router.post('/checkins', asyncHandler((req, res) => recordEvent({ table: 'check_
 
 // POST /api/checkouts
 router.post('/checkouts', asyncHandler((req, res) => recordEvent({ table: 'check_outs', staffCode: req.body.staff_code, req, res })));
+
+// POST /api/checkins/manual, /api/checkouts/manual — admin backfill/correction of a
+// specific date+time (e.g. a missed punch, or fixing a wrong QR scan). requireAuth-gated,
+// unlike the two routes above, because arbitrary date/time entry needs a real admin
+// behind it. Replaces the old tpSave()/saveManualAtt() no-cors write straight to the
+// Google Sheet, which silently dropped the edit on any network/quota failure.
+function manualBody(req) {
+  const manualDate = String(req.body.date || '').trim();
+  const manualTime = String(req.body.time || '').trim();
+  if (!manualDate || !manualTime) return null;
+  return { manualDate, manualTime };
+}
+router.post('/checkins/manual', requireAuth, asyncHandler((req, res) => {
+  const m = manualBody(req);
+  if (!m) return res.status(400).json({ status: 'error', msg: 'date and time required' });
+  return recordEvent({ table: 'check_ins', staffCode: req.body.staff_code, req, res, ...m });
+}));
+router.post('/checkouts/manual', requireAuth, asyncHandler((req, res) => {
+  const m = manualBody(req);
+  if (!m) return res.status(400).json({ status: 'error', msg: 'date and time required' });
+  return recordEvent({ table: 'check_outs', staffCode: req.body.staff_code, req, res, ...m });
+}));
 
 // GET /api/attendance?staffCode=&date=&from=&to=
 router.get('/attendance', asyncHandler(async (req, res) => {

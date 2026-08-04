@@ -237,6 +237,21 @@
         body: JSON.stringify({ staff_code: staffCode, project_name: projectName, latitude, longitude, accuracy }),
       });
     },
+    // Admin backfill/correction of a specific date+time — requireAuth-gated server-side
+    // (see server/routes/attendance.js). Used by hr-system.html's manual attendance edit
+    // forms (tpSave/saveManualAtt), not by staff-portal.html's real-time check-in.
+    async manualCheckIn({ staffCode, projectName, date, time }) {
+      return apiFetch('/api/checkins/manual', {
+        method: 'POST',
+        body: JSON.stringify({ staff_code: staffCode, project_name: projectName, date, time }),
+      });
+    },
+    async manualCheckOut({ staffCode, projectName, date, time }) {
+      return apiFetch('/api/checkouts/manual', {
+        method: 'POST',
+        body: JSON.stringify({ staff_code: staffCode, project_name: projectName, date, time }),
+      });
+    },
     async getAttendance(params) {
       const qs = new URLSearchParams(params || {}).toString();
       return apiFetch('/api/attendance' + (qs ? '?' + qs : ''), { method: 'GET' });
