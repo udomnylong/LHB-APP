@@ -4619,6 +4619,17 @@ function _attActiveDatesInRange(from, to) {
   return [...set].sort();
 }
 
+// Every calendar day within [from,to] inclusive — used for the CSV's In/Out-per-day
+// columns, which should show a blank cell (not a missing column) for off-days, unlike
+// _attActiveDatesInRange's WorkDays/Present/Absent tally.
+function _attAllDatesInRange(from, to) {
+  const dates = [];
+  let d = new Date(from + 'T00:00:00');
+  const end = new Date(to + 'T00:00:00');
+  while (d <= end) { dates.push(_attRptLocalDateStr(d)); d.setDate(d.getDate() + 1); }
+  return dates;
+}
+
 // Returns {from, to, dates, rows} or null (with a toast) if the form state is invalid/empty.
 function _attRptBuildSummary() {
   const from = document.getElementById('attRptFrom').value;
@@ -4635,6 +4646,7 @@ function _attRptBuildSummary() {
 
   const dates = _attActiveDatesInRange(from, to);
   if (!dates.length) { showToast('⚠️ គ្មានទិន្នន័យវត្តមានក្នុងចន្លោះកាលបរិច្ឆេទនេះទេ!', 'warning'); return null; }
+  const allDates = _attAllDatesInRange(from, to);
 
   const rows = staffList.map(s => {
     let present = 0, late = 0, checkedout = 0, absent = 0, leave = 0;
@@ -4646,12 +4658,20 @@ function _attRptBuildSummary() {
       else if (r.Status === 'Leave')      leave++;
       else                                absent++;
     });
+    const daily = {};
+    allDates.forEach(d => {
+      const r = computeAttForDate(s, d);
+      daily[d] = {
+        checkIn:  (r.CheckIn  && r.CheckIn  !== '-') ? r.CheckIn  : '',
+        checkOut: (r.CheckOut && r.CheckOut !== '-') ? r.CheckOut : '',
+      };
+    });
     return { ID: s.ID, Name: s.Name, Position: s.Position, Department: s.Department,
              ProjectName: s.ProjectName, WorkDays: dates.length,
-             Present: present, Late: late, CheckedOut: checkedout, Absent: absent, Leave: leave };
+             Present: present, Late: late, CheckedOut: checkedout, Absent: absent, Leave: leave, daily };
   });
 
-  return { from, to, dates, rows };
+  return { from, to, dates, allDates, rows };
 }
 
 function printAttRangeReport() {
@@ -4746,11 +4766,25 @@ function printAttRangeReport() {
 function exportAttRangeReportCSV() {
   const summary = _attRptBuildSummary();
   if (!summary) return;
-  const { from, to, rows } = summary;
-  downloadCSV(
-    toCSV(rows, ['ID','Name','Department','ProjectName','WorkDays','Present','Late','CheckedOut','Absent','Leave']),
-    `attendance_report_${from}_to_${to}.csv`
-  );
+  const { from, to, allDates, rows } = summary;
+
+  // One In/Out column pair per calendar day, labeled by day-of-month (e.g. In/01, Out/01)
+  // to match the HR department's existing Excel register template.
+  const dayHeaders = allDates.flatMap(d => { const dd = d.slice(8,10); return ['In/'+dd, 'Out/'+dd]; });
+  const headers = ['ID','Name','Department','ProjectName','WorkDays','Present','Late','CheckedOut','Absent','Leave', ...dayHeaders];
+
+  const csvRows = rows.map(r => {
+    const row = { ID:r.ID, Name:r.Name, Department:r.Department, ProjectName:r.ProjectName,
+      WorkDays:r.WorkDays, Present:r.Present, Late:r.Late, CheckedOut:r.CheckedOut, Absent:r.Absent, Leave:r.Leave };
+    allDates.forEach(d => {
+      const dd = d.slice(8,10);
+      row['In/'+dd]  = r.daily[d].checkIn;
+      row['Out/'+dd] = r.daily[d].checkOut;
+    });
+    return row;
+  });
+
+  downloadCSV(toCSV(csvRows, headers), `attendance_report_${from}_to_${to}.csv`);
   showToast('✅ Export ' + rows.length + ' បុគ្គលិក ជោគជ័យ!', 'success');
 }
 
