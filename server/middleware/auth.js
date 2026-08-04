@@ -31,4 +31,15 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, extractToken, SESSION_TTL_MS };
+// Chain after requireAuth (needs req.user). Every other write route in this app only
+// checks "is logged in" and relies on hr-system.html's client-side page permissions to
+// hide admin-only actions — fine for approving a leave request, not fine for creating
+// accounts/changing roles, so user management gets a real server-side check.
+function requireAdmin(req, res, next) {
+  if (!req.user || (req.user.role || '').toLowerCase() !== 'admin') {
+    return res.status(403).json({ status: 'error', msg: 'Admin role required' });
+  }
+  next();
+}
+
+module.exports = { requireAuth, requireAdmin, extractToken, SESSION_TTL_MS };

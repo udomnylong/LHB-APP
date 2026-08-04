@@ -323,6 +323,8 @@ tbody tr:last-child td{border-bottom:none;}
       <div class="nav-item" data-page="comment" data-perm="manage" onclick="showPage('comment')"><i class="fas fa-comments"></i>មតិយោបល់</div>
       <div class="nav-item" data-page="evaluate" data-perm="manage" onclick="showPage('evaluate')"><i class="fas fa-star"></i>វាយតម្លៃបុគ្គលិក</div>
       <div class="nav-item" data-page="workplace" data-perm="manage" onclick="showPage('workplace')"><i class="fas fa-hard-hat"></i>សណ្ដាប់ធ្នាប់</div>
+      <div class="nav-section" id="navSectionSystem" style="display:none;">ប្រព័ន្ធ</div>
+      <div class="nav-item" id="navUsers" data-page="users" data-perm="manage" onclick="showPage('users')" style="display:none;"><i class="fas fa-user-shield"></i>គណនីអ្នកប្រើប្រាស់</div>
     </nav>
     <div class="sidebar-footer">
       <div class="sync-indicator"><div class="dot"></div>ភ្ជាប់ Google Sheet</div>
@@ -939,6 +941,25 @@ tbody tr:last-child td{border-bottom:none;}
         <div class="pagination"><span id="workplaceInfo">0 កំណត់ត្រា</span></div>
       </div>
     </div>
+
+    <div id="page-users" class="page-content" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="fas fa-user-shield" style="color:var(--primary);margin-right:8px;"></i>គណនីអ្នកប្រើប្រាស់</h3>
+          <div class="toolbar">
+            <button class="btn btn-primary btn-sm" onclick="openAddUser()"><i class="fas fa-plus"></i>បន្ថែមគណនី</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Username</th><th>ឈ្មោះ</th><th>តួនាទី</th><th>Email</th><th>ផ្នែក</th><th>តំណែង</th><th></th>
+            </tr></thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -1278,6 +1299,36 @@ tbody tr:last-child td{border-bottom:none;}
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('deptFormModal')">បោះបង់</button>
       <button class="btn btn-primary" onclick="saveDept()"><i class="fas fa-save"></i>រក្សាទុក</button>
+    </div>
+  </div>
+</div>
+
+<!-- User Account Form Modal -->
+<div class="modal-overlay" id="userFormModal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header"><h3 id="userFormTitle">បន្ថែមគណនី</h3><button class="modal-close" onclick="closeModal('userFormModal')"><i class="fas fa-times"></i></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="usr_editUsername">
+      <div class="form-group"><label>Username</label><input type="text" id="usr_username" placeholder="username" autocomplete="off"></div>
+      <div class="form-group" style="margin-top:12px;">
+        <label id="usr_passwordLabel">ពាក្យសម្ងាត់</label>
+        <input type="text" id="usr_password" placeholder="ពាក្យសម្ងាត់" autocomplete="new-password">
+      </div>
+      <div class="form-group" style="margin-top:12px;"><label>ឈ្មោះ</label><input type="text" id="usr_name" placeholder="ឈ្មោះពេញ"></div>
+      <div class="form-group" style="margin-top:12px;">
+        <label>តួនាទី</label>
+        <input type="text" id="usr_role" list="usr_roleList" placeholder="admin / manager / finance / hr / user...">
+        <datalist id="usr_roleList">
+          <option value="admin"><option value="manager"><option value="finance"><option value="hr"><option value="user">
+        </datalist>
+      </div>
+      <div class="form-group" style="margin-top:12px;"><label>Email</label><input type="text" id="usr_email" placeholder="email@example.com"></div>
+      <div class="form-group" style="margin-top:12px;"><label>ផ្នែក</label><input type="text" id="usr_department" placeholder="ផ្នែក"></div>
+      <div class="form-group" style="margin-top:12px;"><label>តំណែង</label><input type="text" id="usr_position" placeholder="តំណែង"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('userFormModal')">បោះបង់</button>
+      <button class="btn btn-primary" onclick="saveUser()"><i class="fas fa-save"></i>រក្សាទុក</button>
     </div>
   </div>
 </div>
@@ -1641,6 +1692,14 @@ function applyAdminUI(user) {
   const isAdmin = role === 'admin';
   const adminTools = document.getElementById('adminDeviceTools');
   if (adminTools) adminTools.style.display = isAdmin ? 'block' : 'none';
+  // Users/permissions management: strictly role==='admin', unlike the general
+  // data-perm="manage" gate which manager/finance roles also satisfy (they get
+  // "full" page access, but account/role management is more sensitive than that —
+  // real enforcement is server-side requireAdmin on the API, this is just the UI gate).
+  const navUsers = document.getElementById('navUsers');
+  const navSectionSystem = document.getElementById('navSectionSystem');
+  if (navUsers) navUsers.style.display = isAdmin ? '' : 'none';
+  if (navSectionSystem) navSectionSystem.style.display = isAdmin ? '' : 'none';
 }
 
 // ========== INIT ==========
@@ -2271,7 +2330,7 @@ function showPage(page) {
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('page-'+page).style.display = 'block';
   event.currentTarget.classList.add('active');
-  const titles = {dashboard:'Dashboard',staff:'ព័ត៌មានបុគ្គលិក',attendance:'វត្តមាន',leave:'ការឈប់សម្រាក',ot:'ម៉ោងលើស (OT)',project:'គម្រោង',structure:'រចនាសម្ព័ន្ធ',payroll:'ប្រាក់ខែ',slip:'Pay Slip',reports:'របាយការណ៍',comment:'មតិយោបល់',workplace:'សណ្ដាប់ធ្នាប់',evaluate:'វាយតម្លៃបុគ្គលិក'};
+  const titles = {dashboard:'Dashboard',staff:'ព័ត៌មានបុគ្គលិក',attendance:'វត្តមាន',leave:'ការឈប់សម្រាក',ot:'ម៉ោងលើស (OT)',project:'គម្រោង',structure:'រចនាសម្ព័ន្ធ',payroll:'ប្រាក់ខែ',slip:'Pay Slip',reports:'របាយការណ៍',comment:'មតិយោបល់',workplace:'សណ្ដាប់ធ្នាប់',evaluate:'វាយតម្លៃបុគ្គលិក',users:'គណនីអ្នកប្រើប្រាស់'};
   document.getElementById('pageTitle').textContent = titles[page] || page;
   if (page === 'staff') renderStaff();
   if (page === 'attendance') { renderAttendance(); markAttendanceSeen(); }
@@ -2284,6 +2343,7 @@ function showPage(page) {
   if (page === 'ot') renderOT();
   if (page === 'payroll') renderPayroll();
   if (page === 'evaluate') { populateEvalStaffSelect(); renderEvaluate(); }
+  if (page === 'users') renderUsers();
   if (window.innerWidth <= 768) closeSidebar();
 }
 
@@ -3889,6 +3949,93 @@ async function saveDept() {
   renderStructure();
   populateSelects();
   showToast('✅ បន្ថែមផ្នែកជោគជ័យ', 'success');
+}
+
+// ========== USERS (admin-only UI gate; real enforcement is server-side requireAdmin) ==========
+function renderUsers() {
+  const tbody = document.getElementById('usersBody');
+  const rows = appData.users || [];
+  tbody.innerHTML = rows.length === 0
+    ? '<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px;">គ្មានទិន្នន័យ</td></tr>'
+    : rows.map(u => `<tr>
+        <td style="font-weight:600;">${u.Username}</td>
+        <td>${u.Name||''}</td>
+        <td><span class="badge badge-blue">${u.Role||''}</span></td>
+        <td>${u.Email||''}</td>
+        <td>${u.Department||''}</td>
+        <td>${u.Position||''}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-outline btn-sm" onclick="openEditUser('${u.Username}')"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteUserAccount('${u.Username}')"><i class="fas fa-trash"></i></button>
+        </td>
+      </tr>`).join('');
+}
+function openAddUser() {
+  document.getElementById('userFormTitle').textContent = 'បន្ថែមគណនី';
+  document.getElementById('usr_editUsername').value = '';
+  document.getElementById('usr_username').value = '';
+  document.getElementById('usr_username').disabled = false;
+  document.getElementById('usr_password').value = '';
+  document.getElementById('usr_password').placeholder = 'ពាក្យសម្ងាត់';
+  document.getElementById('usr_passwordLabel').textContent = 'ពាក្យសម្ងាត់';
+  ['usr_name','usr_role','usr_email','usr_department','usr_position'].forEach(id => document.getElementById(id).value = '');
+  openModal('userFormModal');
+}
+function openEditUser(username) {
+  const u = (appData.users||[]).find(x => x.Username === username);
+  if (!u) return;
+  document.getElementById('userFormTitle').textContent = 'កែប្រែគណនី';
+  document.getElementById('usr_editUsername').value = username;
+  document.getElementById('usr_username').value = username;
+  document.getElementById('usr_username').disabled = true; // username is the lookup key, not editable
+  document.getElementById('usr_password').value = '';
+  document.getElementById('usr_password').placeholder = '(ទុកទទេ ដើម្បីរក្សាពាក្យសម្ងាត់ដើម)';
+  document.getElementById('usr_passwordLabel').textContent = 'ពាក្យសម្ងាត់ថ្មី (ស្រេចចិត្ត)';
+  document.getElementById('usr_name').value = u.Name||'';
+  document.getElementById('usr_role').value = u.Role||'';
+  document.getElementById('usr_email').value = u.Email||'';
+  document.getElementById('usr_department').value = u.Department||'';
+  document.getElementById('usr_position').value = u.Position||'';
+  openModal('userFormModal');
+}
+async function loadUsersList() {
+  const r = await LhbApi.getUsers();
+  if (r._ok && Array.isArray(r.data)) appData.users = r.data;
+}
+async function saveUser() {
+  const editUsername = document.getElementById('usr_editUsername').value;
+  const username = document.getElementById('usr_username').value.trim();
+  const password = document.getElementById('usr_password').value;
+  const name = document.getElementById('usr_name').value.trim();
+  const role = document.getElementById('usr_role').value.trim();
+  const email = document.getElementById('usr_email').value.trim();
+  const department = document.getElementById('usr_department').value.trim();
+  const position = document.getElementById('usr_position').value.trim();
+  if (!username) { showToast('⚠️ សូមបញ្ចូល Username', 'warning'); return; }
+  if (!editUsername && !password) { showToast('⚠️ សូមបញ្ចូលពាក្យសម្ងាត់', 'warning'); return; }
+
+  showLoading(true);
+  const r = editUsername
+    ? await LhbApi.updateUser(editUsername, { ...(password ? { password } : {}), name, role, email, department, position })
+    : await LhbApi.createUser({ username, password, name, role, email, department, position });
+  showLoading(false);
+  if (!r._ok) { showToast('❌ '+(r.msg||'រក្សាទុកមិនបានជោគជ័យ'), 'error'); return; }
+
+  await loadUsersList();
+  closeModal('userFormModal');
+  renderUsers();
+  showToast('✅ រក្សាទុកគណនីជោគជ័យ!', 'success');
+}
+async function deleteUserAccount(username) {
+  if (currentUser && username === currentUser.Username) { showToast('⚠️ មិនអាចលុបគណនីខ្លួនឯងបានទេ', 'warning'); return; }
+  if (!confirm('លុបគណនី "'+username+'" ?')) return;
+  showLoading(true);
+  const r = await LhbApi.deleteUser(username);
+  showLoading(false);
+  if (!r._ok) { showToast('❌ '+(r.msg||'លុបមិនបានជោគជ័យ'), 'error'); return; }
+  await loadUsersList();
+  renderUsers();
+  showToast('🗑️ លុបគណនីជោគជ័យ', 'success');
 }
 
 // ========== PENALTY HELPERS ==========

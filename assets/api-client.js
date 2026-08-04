@@ -165,6 +165,17 @@
       }
       return r;
     },
+    // Create/edit/delete are admin-only server-side (requireAdmin, see users.js) — the
+    // UI should already be hiding these from non-admins, this is the real enforcement.
+    async createUser({ username, password, name, role, email, department, position }) {
+      return apiFetch('/api/users', { method: 'POST', body: JSON.stringify({ username, password, name, role, email, department, position }) });
+    },
+    async updateUser(username, fields) {
+      return apiFetch('/api/users/' + encodeURIComponent(username), { method: 'PUT', body: JSON.stringify(fields) });
+    },
+    async deleteUser(username) {
+      return apiFetch('/api/users/' + encodeURIComponent(username), { method: 'DELETE' });
+    },
 
     // ── Staff (sheet-shaped in/out — see staffRowToApi/staffApiToRow) ──
     async getStaff() {
