@@ -255,3 +255,33 @@ CREATE TABLE IF NOT EXISTS staff_evaluations (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_staff_evaluations_staff ON staff_evaluations (staff_code);
+
+-- ============================================================
+-- Phase C — admin-only config that previously lived in browser localStorage
+-- (savePenalty/getAttSettings/saveAttSettings/appData.departments). No sheet
+-- equivalent ever existed for these; they were never persisted server-side at all.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS payroll_penalties (
+  id          BIGSERIAL PRIMARY KEY,
+  staff_code  VARCHAR(50) NOT NULL REFERENCES staff(staff_code) ON DELETE CASCADE,
+  month       VARCHAR(7) NOT NULL,   -- 'YYYY-MM'
+  amount      NUMERIC(12,2) NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (staff_code, month)
+);
+
+-- Single-row config blob (late-grace/deduction rules, per-department shift schedules) —
+-- edited as one unit via one settings form, nothing needs to query inside it relationally.
+CREATE TABLE IF NOT EXISTS attendance_settings (
+  id          BIGSERIAL PRIMARY KEY,
+  settings    JSONB NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS departments (
+  id               BIGSERIAL PRIMARY KEY,
+  name             TEXT NOT NULL UNIQUE,
+  head_staff_code  VARCHAR(50) REFERENCES staff(staff_code) ON DELETE SET NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);

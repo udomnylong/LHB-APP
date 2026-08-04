@@ -306,6 +306,38 @@
       return apiFetch('/api/evaluations/' + encodeURIComponent(recordId), { method: 'DELETE' });
     },
 
+    // ── Payroll penalty (admin-only; no sheet ever existed for this — it was
+    // localStorage-only before) ──
+    async getPenalties(params) {
+      const qs = new URLSearchParams(params || {}).toString();
+      return apiFetch('/api/penalty' + (qs ? '?' + qs : ''), { method: 'GET' });
+    },
+    async savePenalty(staffCode, month, amount) {
+      return apiFetch('/api/penalty', { method: 'PUT', body: JSON.stringify({ staff_code: staffCode, month, amount }) });
+    },
+
+    // ── Attendance settings (admin-only; single JSON blob) ──
+    async getAttSettingsRemote() {
+      return apiFetch('/api/att-settings', { method: 'GET' });
+    },
+    async saveAttSettingsRemote(settings) {
+      return apiFetch('/api/att-settings', { method: 'PUT', body: JSON.stringify(settings) });
+    },
+
+    // ── Departments (admin-only) ──
+    async getDepartments() {
+      return apiFetch('/api/departments', { method: 'GET' });
+    },
+    async createDepartment(name, headStaffCode) {
+      return apiFetch('/api/departments', { method: 'POST', body: JSON.stringify({ name, head_staff_code: headStaffCode || null }) });
+    },
+    async updateDepartment(id, fields) {
+      return apiFetch('/api/departments/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(fields) });
+    },
+    async deleteDepartment(id) {
+      return apiFetch('/api/departments/' + encodeURIComponent(id), { method: 'DELETE' });
+    },
+
     // ── Attendance (real-time check-in/out; manualCheckIn/manualCheckOut below cover
     // admin backfill/correction edits) ──
     async checkIn({ staffCode, projectName, latitude, longitude, accuracy }) {

@@ -1301,7 +1301,7 @@ const SHEETS = {
 let currentUser = null;
 let appData = {
   staff: [], attendance: [], leave: [], project: [], ot: [],
-  payroll: [], departments: ['IT', 'HR', 'Finance', 'Operations', 'Management'],
+  payroll: [], departments: [], departmentRecords: [],
   users: [], checkin: [], checkout: [], food: [],
   comment: [], workplace: [], evaluate: []
 };
@@ -1948,6 +1948,7 @@ async function loadAllData() {
       fetchSheet(SHEETS.workplace),
       fetchSheet(SHEETS.evaluate)
     ]);
+    await Promise.all([loadDepartments(), loadAttSettings()]);
 
     // Default EmploymentStatus for existing staff without the field
     if (staffData) staffData.forEach(s => { if (!s.EmploymentStatus) s.EmploymentStatus = 'កំពុងធ្វើការ'; });
@@ -3757,7 +3758,13 @@ function renderStructure() {
     const members = appData.staff.filter(s => s.Department === dept).sort((a,b)=>lvNum(a.LV)-lvNum(b.LV));
     return `
     <div class="dept-card">
-      <h4><i class="fas fa-building" style="color:var(--primary);margin-right:8px;"></i>${dept}</h4>
+      <h4 style="display:flex;align-items:center;justify-content:space-between;">
+        <span><i class="fas fa-building" style="color:var(--primary);margin-right:8px;"></i>${dept}</span>
+        <span>
+          <button class="btn btn-outline btn-sm" onclick="editDept('${dept.replace(/'/g,"\\'")}')" title="កែឈ្មោះ"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteDept('${dept.replace(/'/g,"\\'")}')" title="លុប"><i class="fas fa-trash"></i></button>
+        </span>
+      </h4>
       <div class="dept-stats">
         <div class="dept-stat"><div class="num">${members.length}</div><div class="lbl">បុគ្គលិក</div></div>
         <div class="dept-stat"><div class="num">${members.filter(s=>s.Sex==='ប្រុស').length}</div><div class="lbl">ប្រុស</div></div>
@@ -3820,21 +3827,41 @@ function renderStructure() {
     <h3 style="font-size:16px;font-weight:700;color:var(--primary);margin-bottom:16px;"><i class="fas fa-table" style="margin-right:8px;"></i>សង្ខេបតាមផ្នែក</h3>
     ${summaryHtml}`;
 }
-function editDept(oldName) {
-  const newName = prompt('កែឈ្មោះផ្នែក:', oldName);
-  if (!newName || newName.trim() === oldName) return;
-  // Update in appData.departments
-  const idx = appData.departments.indexOf(oldName);
-  if (idx >= 0) appData.departments[idx] = newName.trim();
-  // Update staff who belong to this dept
-  appData.staff.forEach(s => { if(s.Department === oldName) s.Department = newName.trim(); });
-  renderStructure();
-  showToast('✅ ផ្នែក "'+oldName+'" → "'+newName.trim()+'"', 'success');
+// appData.departments stays an array of name strings (every other call site — the
+// depts merge in renderStructure()/populateSelects() — already expects that shape).
+// appData.departmentRecords holds the real {id,name,head_staff_code} rows so edit/delete
+// know which Postgres row to act on.
+async function loadDepartments() {
+  const r = await LhbApi.getDepartments();
+  appData.departmentRecords = (r._ok && Array.isArray(r.data)) ? r.data : [];
+  appData.departments = appData.departmentRecords.map(d => d.name);
 }
 
-function deleteDept(name) {
+async function editDept(oldName) {
+  const newName = prompt('កែឈ្មោះផ្នែក:', oldName);
+  if (!newName || newName.trim() === oldName) return;
+  const trimmed = newName.trim();
+  const rec = appData.departmentRecords.find(d => d.name === oldName);
+  showLoading(true);
+  const r = rec
+    ? await LhbApi.updateDepartment(rec.id, { name: trimmed })
+    : await LhbApi.createDepartment(trimmed); // implicit dept (from staff data only) — no record yet
+  showLoading(false);
+  if (!r._ok) { showToast('❌ '+(r.msg||'កែមិនបានជោគជ័យ'), 'error'); return; }
+  await loadDepartments();
+  renderStructure();
+  showToast('✅ ផ្នែក "'+oldName+'" → "'+trimmed+'" (ឈ្មោះបុគ្គលិកដែលមានស្រាប់មិនប្តូរទេ)', 'success');
+}
+
+async function deleteDept(name) {
+  const rec = appData.departmentRecords.find(d => d.name === name);
+  if (!rec) { showToast('⚠️ ផ្នែកនេះមកពីទិន្នន័យបុគ្គលិកដោយផ្ទាល់ មិនមែនកំណត់ត្រាដាច់ដោយឡែកទេ — លុបមិនបានទេ', 'warning'); return; }
   if (!confirm('លុបផ្នែក "'+name+'" ?')) return;
-  appData.departments = appData.departments.filter(d => d !== name);
+  showLoading(true);
+  const r = await LhbApi.deleteDepartment(rec.id);
+  showLoading(false);
+  if (!r._ok) { showToast('❌ '+(r.msg||'លុបមិនបានជោគជ័យ'), 'error'); return; }
+  await loadDepartments();
   renderStructure();
   showToast('🗑️ លុបផ្នែក "'+name+'" ','success');
 }
@@ -3844,15 +3871,20 @@ function openAddDept() {
   const sel = document.getElementById('dept_head');
   sel.innerHTML = '<option value="">-- ជ្រើសប្រធានផ្នែក --</option>' +
     appData.staff.map(s =>
-      `<option value="${cleanName(s.Name)}">${cleanName(s.Name)} (${s.ID}) — ${s.Position||''}</option>`
+      `<option value="${s.ID}">${cleanName(s.Name)} (${s.ID}) — ${s.Position||''}</option>`
     ).join('');
   document.getElementById('dept_name').value = '';
   openModal('deptFormModal');
 }
-function saveDept() {
+async function saveDept() {
   const name = document.getElementById('dept_name').value.trim();
+  const headId = document.getElementById('dept_head').value || null;
   if (!name) { showToast('⚠️ សូមបញ្ចូលឈ្មោះផ្នែក', 'warning'); return; }
-  if (!appData.departments.includes(name)) appData.departments.push(name);
+  showLoading(true);
+  const r = await LhbApi.createDepartment(name, headId);
+  showLoading(false);
+  if (!r._ok) { showToast('❌ '+(r.msg||'បន្ថែមមិនបានជោគជ័យ'), 'error'); return; }
+  await loadDepartments();
   closeModal('deptFormModal');
   renderStructure();
   populateSelects();
@@ -3860,9 +3892,25 @@ function saveDept() {
 }
 
 // ========== PENALTY HELPERS ==========
-function savePenalty(staffId, month, val) {
-  const key = 'penalty_' + staffId + '_' + month;
-  localStorage.setItem(key, Number(val)||0);
+// In-memory cache, batch-loaded per month by calculatePayroll()/generateSlip() (one
+// LhbApi.getPenalties({month}) call instead of a request per staff row).
+let _penaltyCache = {};
+function _penaltyKey(staffId, month) { return staffId + '_' + month; }
+async function loadPenaltiesForMonth(month) {
+  const r = await LhbApi.getPenalties({ month });
+  if (r._ok && Array.isArray(r.data)) {
+    r.data.forEach(p => { _penaltyCache[_penaltyKey(p.staff_code, p.month)] = Number(p.amount) || 0; });
+  }
+}
+function getPenaltyCached(staffId, month) {
+  const key = _penaltyKey(staffId, month);
+  return _penaltyCache[key] !== undefined ? _penaltyCache[key] : 0;
+}
+async function savePenalty(staffId, month, val) {
+  const amount = Number(val) || 0;
+  _penaltyCache[_penaltyKey(staffId, month)] = amount; // optimistic — UI already reflects it
+  const r = await LhbApi.savePenalty(staffId, month, amount);
+  if (!r._ok) showToast('❌ ពិន័យមិនបានរក្សាទុក: ' + (r.msg||'unknown error'), 'error');
 }
 function recalcRow(inputEl) {
   const row = inputEl.closest('tr');
@@ -3880,10 +3928,12 @@ function recalcRow(inputEl) {
 }
 
 // ========== ATTENDANCE SETTINGS ==========
-const ATT_SETTINGS_KEY = 'lhb_attSettings_v1';
+// Loaded once from Postgres at app init (loadAttSettings(), called from loadAllData()).
+// getAttSettings() stays synchronous — it's called from ~15 places throughout the
+// attendance/payroll code — by reading this in-memory cache instead of localStorage.
+let _attSettingsCache = null;
 
-function getAttSettings() {
-  try { const s = localStorage.getItem(ATT_SETTINGS_KEY); if (s) return JSON.parse(s); } catch(e) {}
+function _attSettingsDefaults() {
   return {
     groups: [
       { id:'A', checkIn:'07:00', checkOut:'17:00',
@@ -3899,7 +3949,18 @@ function getAttSettings() {
     halfDayNoCheckOut: true,
   };
 }
-function saveAttSettings(s) { localStorage.setItem(ATT_SETTINGS_KEY, JSON.stringify(s)); }
+function getAttSettings() {
+  return _attSettingsCache || _attSettingsDefaults();
+}
+async function loadAttSettings() {
+  const r = await LhbApi.getAttSettingsRemote();
+  _attSettingsCache = (r._ok && r.data) ? r.data : _attSettingsDefaults();
+}
+async function saveAttSettings(s) {
+  _attSettingsCache = s;
+  const r = await LhbApi.saveAttSettingsRemote(s);
+  if (!r._ok) throw new Error(r.msg || 'រក្សាទុកមិនបានជោគជ័យ');
+}
 
 function getDeptSchedule(dept) {
   const cfg = getAttSettings();
@@ -4107,7 +4168,7 @@ function updateAttCfgFormula() {
   const gd=document.getElementById('cfgGraceDisplay'), md=document.getElementById('cfgMultDisplay');
   if(g&&gd) gd.textContent=g.value; if(m&&md) md.textContent=m.value;
 }
-function saveAttSettingsForm() {
+async function saveAttSettingsForm() {
   const s=getAttSettings();
   s.groups.forEach((g,i)=>{
     const n=i+1;
@@ -4119,7 +4180,8 @@ function saveAttSettingsForm() {
   if(ge) s.lateGraceHours=Number(ge.value)||4; if(me) s.lateDeductMultiplier=Number(me.value)||2;
   const hi=document.getElementById('attCfgHalfIn'), ho=document.getElementById('attCfgHalfOut');
   if(hi) s.halfDayNoCheckIn=hi.checked; if(ho) s.halfDayNoCheckOut=ho.checked;
-  saveAttSettings(s); closeAttSettings();
+  try { await saveAttSettings(s); } catch(e) { showToast('❌ '+e.message, 'error'); return; }
+  closeAttSettings();
   showToast('រក្សាទុកការកំណត់វត្តមានដោយជោគជ័យ!','success');
   if(document.getElementById('page-attendance')&&document.getElementById('page-attendance').style.display!=='none') renderAttendance();
 }
@@ -4206,12 +4268,14 @@ function calcPayrollForStaff(s, month) {
            totalOT, totalLateHours, absDeduction, lateDeduction,
            deduction, otPay, amount, eligibleOT };
 }
-function calculatePayroll() {
+async function calculatePayroll() {
   const month  = document.getElementById('payrollMonth').value;
   const filter = document.getElementById('payrollFilter').value;
   let staffList = filter ? appData.staff.filter(s => s.Department===filter) : [...appData.staff];
   const tbody = document.getElementById('payrollBody');
   let totalAmt = 0, totalDeduct = 0, totalOTPay = 0;
+
+  await loadPenaltiesForMonth(month);
 
   tbody.innerHTML = staffList.map(s => {
     const p = calcPayrollForStaff(s, month);
@@ -4223,8 +4287,7 @@ function calculatePayroll() {
       ? `<span class="badge badge-green" title="មានសិទ្ធិ OT (Salary < $${PAYROLL_OT_SALARY_LIMIT})">OT ✓</span>`
       : `<span class="badge badge-gray"  title="គ្មានសិទ្ធិ OT (Salary ≥ $${PAYROLL_OT_SALARY_LIMIT})">No OT</span>`;
 
-    const penKey = 'penalty_'+s.ID+'_'+month;
-    const savedPenalty = Number(localStorage.getItem(penKey)||0);
+    const savedPenalty = getPenaltyCached(s.ID, month);
     const netWithPenalty = Math.max(0, p.amount - savedPenalty);
     totalAmt = totalAmt - p.amount + netWithPenalty;
     return `<tr>
@@ -4255,7 +4318,7 @@ function calculatePayroll() {
 }
 
 // ========== SLIP ==========
-function generateSlip() {
+async function generateSlip() {
   const staffId   = document.getElementById('slipStaff').value;
   const month     = document.getElementById('slipMonth').value;
   const allowance = Number(document.getElementById('slipAllowance')?.value || 0);
@@ -4263,8 +4326,9 @@ function generateSlip() {
   if (!s)    { showToast('⚠️ សូមជ្រើសបុគ្គលិក','warning'); return; }
   if (!month){ showToast('⚠️ សូមជ្រើសខែ','warning'); return; }
 
+  await loadPenaltiesForMonth(month);
   const p = calcPayrollForStaff(s, month);
-  const penalty   = Number(localStorage.getItem('penalty_'+s.ID+'_'+month)||0);
+  const penalty   = getPenaltyCached(s.ID, month);
   const totalIn   = p.salary + allowance + p.otPay;
   const totalOut  = p.absDeduction + p.lateDeduction + penalty;
   const netFinal  = Math.max(0, totalIn - totalOut);

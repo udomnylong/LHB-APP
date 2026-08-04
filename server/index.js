@@ -19,6 +19,9 @@ app.use('/api/food', require('./routes/food'));
 app.use('/api/comments', require('./routes/comments'));
 app.use('/api/workplace', require('./routes/workplace'));
 app.use('/api/evaluations', require('./routes/evaluations'));
+app.use('/api/penalty', require('./routes/penalty'));
+app.use('/api/att-settings', require('./routes/att-settings'));
+app.use('/api/departments', require('./routes/departments'));
 app.use('/api/telegram', require('./routes/telegram'));
 app.use('/api/admin', require('./routes/admin'));
 
