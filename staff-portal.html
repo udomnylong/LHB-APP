@@ -2430,20 +2430,6 @@ function showTab(tab) {
 }
 
 // ════════════════════════════════════════════════
-// POST DATA
-// ════════════════════════════════════════════════
-async function postData(payload) {
-  const r = await fetch(SU, {
-    method:'POST', mode:'cors',
-    headers:{'Content-Type':'text/plain'},
-    body: JSON.stringify(payload)
-  });
-  const j = await r.json();
-  if (j.status !== 'ok') throw new Error(j.msg || 'Server error');
-  return j;
-}
-
-// ════════════════════════════════════════════════
 // TOAST
 // ════════════════════════════════════════════════
 let _toastTimer;
@@ -2503,18 +2489,18 @@ function showToast(msg, type) {
     initApp(_bootStaff); // Load UI from cached data — errors here do NOT clear the session
     hideSplash(1400); // Keep splash ~1.4s so bar animation feels complete
 
-    // Background refresh: silently update staff data from Sheet
+    // Background refresh: silently update staff data from Postgres (source of truth —
+    // the Sheet is only a periodic backup snapshot now, so reading it here could miss
+    // a just-applied suspension/resignation).
     setTimeout(async () => {
       try {
         const cred = localStorage.getItem('sp_cred');
         if (!cred) return;
         const { email } = JSON.parse(atob(cred));
         if (!email) return;
-        const r   = await fetch(SU + '?sheet=StaffInfo&t=' + Date.now(), { cache:'no-store' });
-        const txt = await r.text();
-        const j   = JSON.parse(txt.startsWith('{') ? txt : txt.replace(/^[^{]*/,''));
-        if (!j || !j.data) return;
-        const fresh = j.data.find(s =>
+        const r = await LhbApi.getStaff();
+        if (!r._ok || !r.data) return;
+        const fresh = r.data.find(s =>
           (s.Gmail||'').toLowerCase().trim() === email.toLowerCase().trim()
         );
         if (fresh) {

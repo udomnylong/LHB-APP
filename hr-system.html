@@ -1336,8 +1336,9 @@ tbody tr:last-child td{border-bottom:none;}
 <script src="assets/api-client.js"></script>
 <script>
 // ========== CONFIG ==========
-const SHEET_ID = '16ryjqdieYbZAaG9phRMVInz_Yt6bP8KtWmEYXBcZRH0';
-const API_KEY = ''; // Optional: add Google API key for public sheets
+// Only used now for Google Drive photo upload/replace calls (onStaffPhoto, the QR/
+// standalone-scan-page generator) — every sheet read/write goes through Cloud Run
+// (assets/api-client.js) instead.
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxdUb5ViHMtyZCyzZ53Z4HGXaG_2PO9CeUisdKVwje-JxEPddrr5TnAMwX5iqASHkMh/exec';
 
 // Sheet names
@@ -1727,22 +1728,7 @@ function setCurrentDate() {
   document.getElementById('currentDate').textContent = d.toLocaleDateString('km-KH', opts);
 }
 
-// ========== GOOGLE SHEETS INTEGRATION ==========
-
-const SHEET_HEADERS = {
-  User:       ['Username','Password','Name','Role','Email'],
-  StaffInfo:  ['ID','Name','NameLatin','Sex','LV','Position','Department','ProjectName','DateOfBirth','StartingDate','ResignDate','Salary','Gmail','BankName','BankNumber','Photo','Phone','EmploymentStatus'],
-  Attendance: ['ID','Name','Position','Department','ProjectName','CheckIn','CheckOut','Late','Early','Status','Date'],
-  StaffLeave: ['ID','Name','TypeOfLeave','StartDate','EndDate','Days','Reason','Status'],
-  Project:    ['ProjectID','ProjectName','Location','Latitude','Longitude','Radius','Status'],
-  StaffOT:    ['ID','Name','Date','Hours','TypeOfWork','Status','Remark'],
-  Food:       ['Date','ID','Name','Sex','Position','ProjectName','Morning','Lunch','Evening','Total','UnitPrice','TotalPrice','PhotoMorning','PhotoLunch','PhotoEvening','Comment','Remark'],
-  CheckIn:    ['ID','Name','Gmail','ProjectName','Date','Time','Timestamp','Latitude','Longitude','Accuracy','LateEarly','Minutes','Position','Department'],
-  CheckOut:   ['ID','Name','Gmail','ProjectName','Date','Time','Timestamp','Latitude','Longitude','Accuracy','LateEarly','Minutes','Position','Department'],
-  Comment:    ['Date','Time','ID','Name','Department','ProjectName','Comment','Photo','Status'],
-  Workplace:  ['Date','Time','ID','Name','Department','ProjectName','Comment','Photo','Status'],
-  EvaluateStaff: ['EvalNo','RequestBy','StaffName','StaffID','DateEvaluate','KPIScore','PreviousSalary','CurrentSalary','ApprovedBy','Remark'],
-};
+// ========== DATA LOADING (Cloud Run / Postgres — see assets/api-client.js) ==========
 
 async function fetchSheet(sheetName) {
   // Phase 2: StaffInfo/User are served from Cloud Run now, not Apps Script/Sheets.
@@ -1812,49 +1798,8 @@ async function fetchSheet(sheetName) {
     console.warn('[HR] LhbApi.getEvaluations failed:', r.msg);
     return [];
   }
-  // Method 1: Apps Script doGet (primary - handles CORS properly)
-  try {
-    const url = APPS_SCRIPT_URL + '?action=read&sheet=' + encodeURIComponent(sheetName) + '&t=' + Date.now();
-    const res = await fetchWithTimeout(url, { method: 'GET', redirect: 'follow' }, 15000);
-    const text = await res.text();
-    // Handle Apps Script redirect wrapping
-    let json;
-    try { json = JSON.parse(text); }
-    catch(pe) {
-      const m = text.match(/\{[\s\S]*\}/);
-      if (m) json = JSON.parse(m[0]);
-      else throw new Error('Invalid JSON: ' + text.slice(0,100));
-    }
-    console.log('[HR] fetchSheet', sheetName, '-> status:', json.status, 'rows:', json.data ? json.data.length : 0);
-    if (json.status === 'ok' && Array.isArray(json.data)) return json.data;
-  } catch(e) {
-    console.warn('[HR] Apps Script fetch failed for', sheetName, e.message);
-  }
-  // Method 2: gviz fallback (for public sheets)
-  try {
-    const url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:json&sheet=' + encodeURIComponent(sheetName) + '&t=' + Date.now();
-    const res = await fetch(url);
-    const text = await res.text();
-    const m = text.match(/setResponse\(([\s\S]*)\)/);
-    if (!m) { console.warn('[HR] gviz no match for', sheetName); return null; }
-    const j = JSON.parse(m[1]);
-    if (!j.table) return null;
-    const cols = j.table.cols.map(c => c.label).filter(Boolean);
-    if (!cols.length || !j.table.rows) return null;
-    const rows = j.table.rows.map(row => {
-      const obj = {};
-      cols.forEach((col, i) => {
-        const cell = row.c && row.c[i];
-        obj[col] = cell ? (cell.f != null ? cell.f : (cell.v != null ? String(cell.v) : '')) : '';
-      });
-      return obj;
-    }).filter(obj => Object.values(obj).some(v => v !== '' && v !== null && v !== undefined));
-    console.log('[HR] gviz fallback', sheetName, '->', rows.length, 'rows');
-    return rows;
-  } catch(e2) {
-    console.warn('[HR] gviz fetch failed for', sheetName, e2.message);
-    return null;
-  }
+  console.warn('[HR] fetchSheet: unknown sheet name', sheetName);
+  return [];
 }
 
 async function writeToSheet(sheetName, rowData, action) {
@@ -1879,22 +1824,8 @@ async function writeToSheet(sheetName, rowData, action) {
     if (!r._ok) console.warn('[LhbApi] createProject failed:', r.msg);
     return r._ok;
   }
-  if (!APPS_SCRIPT_URL) { showToast('⚠️ Apps Script URL មិនទាន់កំណត់', 'warning'); return false; }
-  const hdrs = SHEET_HEADERS[sheetName] || Object.keys(rowData);
-  const rowArr = hdrs.map(h => (rowData[h] !== undefined && rowData[h] !== null) ? String(rowData[h]) : '');
-  const payload = { action: action, sheet: sheetName, data: rowData, row: rowArr, headers: hdrs };
-  try {
-    // mode:'cors' (not 'no-cors') so we can actually read whether the write succeeded —
-    // no-cors fire-and-forget meant this always reported success even when it failed.
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST', mode: 'cors',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain' }
-    });
-    const json = await res.json();
-    if (json.status !== 'ok') console.warn('[writeToSheet]', json.msg);
-    return json.status === 'ok';
-  } catch(e) { console.warn('[writeToSheet]', e); return false; }
+  console.warn('[HR] writeToSheet: unknown sheet/action', sheetName, action);
+  return false;
 }
 
 // Delete from sheet by row key
@@ -1921,18 +1852,8 @@ async function deleteFromSheet(sheetName, keyField, keyValue) {
     if (!r._ok) console.warn('[LhbApi] deleteProject failed:', r.msg);
     return r._ok;
   }
-  if (!APPS_SCRIPT_URL) return false;
-  const payload = { action: 'delete', sheet: sheetName, keyField, keyValue: String(keyValue) };
-  try {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST', mode: 'cors',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain' }
-    });
-    const json = await res.json();
-    if (json.status !== 'ok') console.warn('[deleteFromSheet]', json.msg);
-    return json.status === 'ok';
-  } catch(e) { console.warn('[deleteFromSheet]', e); return false; }
+  console.warn('[HR] deleteFromSheet: unknown sheet', sheetName);
+  return false;
 }
 
 // Update a row in sheet
@@ -1960,33 +1881,8 @@ async function updateInSheet(sheetName, keyField, keyValue, rowData, keyDate) {
     if (!r._ok) console.warn('[LhbApi] updateProject failed:', r.msg);
     return r._ok;
   }
-  if (!APPS_SCRIPT_URL) return false;
-  const hdrs = SHEET_HEADERS[sheetName] || Object.keys(rowData);
-  const rowArr = hdrs.map(h => (rowData[h] !== undefined && rowData[h] !== null) ? String(rowData[h]) : '');
-  const payload = { action: 'update', sheet: sheetName, keyField, keyValue: String(keyValue), data: rowData, row: rowArr, headers: hdrs };
-  if (keyDate) payload.keyDate = String(keyDate);
-  try {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST', mode: 'cors',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain' }
-    });
-    const json = await res.json();
-    if (json.status !== 'ok') console.warn('[updateInSheet]', json.msg);
-    return json.status === 'ok';
-  } catch(e) { console.warn('[updateInSheet]', e); return false; }
-}
-
-async function setupSheetHeaders() {
-  if (!APPS_SCRIPT_URL) return;
-  try {
-    fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: JSON.stringify({ action: 'setupHeaders', headers: SHEET_HEADERS }),
-      headers: { 'Content-Type': 'text/plain' }
-    });
-  } catch(e) {}
+  console.warn('[HR] updateInSheet: unknown sheet', sheetName);
+  return false;
 }
 
 async function loadAllData() {
@@ -2059,14 +1955,14 @@ async function loadAllData() {
     if (hasAnyConnection) {
       const count = Array.isArray(staffData) ? staffData.length : 0;
       if (count === 0) {
-        showToast('✅ ភ្ជាប់ Sheet ជោគជ័យ! StaffInfo នៅទទេ — សូមបន្ថែមបុគ្គលិក', 'success');
+        showToast('✅ ភ្ជាប់ជោគជ័យ! StaffInfo នៅទទេ — សូមបន្ថែមបុគ្គលិក', 'success');
       } else {
-        showToast('✅ Sync ជោគជ័យ! បុគ្គលិក: ' + count + ' នាក់', 'success');
+        showToast('✅ ភ្ជាប់ជោគជ័យ! បុគ្គលិក: ' + count + ' នាក់', 'success');
       }
     } else {
-      // Only fall back to Demo if ALL sheets failed to connect
+      // Only fall back to Demo if the server connection failed entirely
       loadDemoData();
-      showToast('⚠️ មិនអាចភ្ជាប់ Sheet — ប្រើ Demo Data', 'warning');
+      showToast('⚠️ មិនអាចភ្ជាប់ Server — ប្រើ Demo Data', 'warning');
     }
     // Update nav badges after data load
     updateNavBadges();
@@ -2084,8 +1980,6 @@ async function loadAllData() {
     populateSelects();
     loadDashboard();
     showLoading(false);
-    // Setup headers silently after data is loaded
-    setTimeout(setupSheetHeaders, 2000);
   }
 }
 
@@ -2412,7 +2306,7 @@ async function deleteStaff(id) {
   await deleteFromSheet(SHEETS.staff, 'ID', id);
   renderStaff();
   populateSelects();
-  showToast('🗑️ លុបបុគ្គលិកជោគជ័យ — Synced ទៅ Sheet!', 'success');
+  showToast('🗑️ លុបបុគ្គលិកជោគជ័យ!', 'success');
 }
 
 function showStaffDetail(id) {
@@ -2554,7 +2448,7 @@ async function saveStaff() {
   closeModal('staffFormModal');
   renderStaff();
   populateSelects();
-  showToast((isEdit ? '✅ កែប្រែ' : '✅ បន្ថែម') + ' + Sync ទៅ Sheet ជោគជ័យ!', 'success');
+  showToast((isEdit ? '✅ កែប្រែ' : '✅ បន្ថែម') + ' + Sync ជោគជ័យ!', 'success');
 }
 
 // ========== ATTENDANCE ==========
