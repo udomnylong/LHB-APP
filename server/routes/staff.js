@@ -1,6 +1,6 @@
 const express = require('express');
 const { pool } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 const asyncHandler = require('../asyncHandler');
 
 const router = express.Router();
@@ -70,6 +70,15 @@ router.put('/:staffCode', asyncHandler(async (req, res) => {
   );
   if (result.rowCount === 0) return res.status(404).json({ status: 'error', msg: 'Staff not found: ' + staffCode });
   res.json({ status: 'ok' });
+}));
+
+// POST /api/staff/clear-salaries — bulk-clears salary for every staff row (admin-only
+// "ព័ត៌មានបុគ្គលិក" UI action). Destructive and irreversible without a prior backup
+// (see POST /api/admin/backup-to-sheets), so this gets a real server-side requireAdmin
+// check, not just a hidden button — same reasoning as users.js's account management.
+router.post('/clear-salaries', requireAdmin, asyncHandler(async (req, res) => {
+  const result = await pool.query(`UPDATE staff SET salary = NULL, updated_at = now() WHERE salary IS NOT NULL`);
+  res.json({ status: 'ok', cleared: result.rowCount });
 }));
 
 // DELETE /api/staff/:staffCode

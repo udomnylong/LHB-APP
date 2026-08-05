@@ -401,6 +401,7 @@ tbody tr:last-child td{border-bottom:none;}
             <button class="btn btn-success btn-sm" onclick="openAddStaff()"><i class="fas fa-plus"></i>បន្ថែមបុគ្គលិក</button>
             <button class="btn btn-primary btn-sm" onclick="printStaff()"><i class="fas fa-print"></i>Print</button>
             <button class="btn btn-outline btn-sm" onclick="exportStaffCSV()"><i class="fas fa-file-excel"></i>Export</button>
+            <button class="btn btn-danger btn-sm" id="btnClearSalaries" style="display:none;" onclick="clearAllStaffSalaries()" title="សម្អាតប្រាក់ខែគ្រប់បុគ្គលិកទាំងអស់"><i class="fas fa-eraser"></i>លុបប្រាក់ខែទាំងអស់</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -1711,6 +1712,10 @@ function applyAdminUI(user) {
   const navSectionSystem = document.getElementById('navSectionSystem');
   if (navUsers) navUsers.style.display = isAdmin ? '' : 'none';
   if (navSectionSystem) navSectionSystem.style.display = isAdmin ? '' : 'none';
+  // Bulk-clear-salaries: destructive, admin-only — real enforcement is server-side
+  // requireAdmin on POST /api/staff/clear-salaries, this just hides the button.
+  const btnClearSalaries = document.getElementById('btnClearSalaries');
+  if (btnClearSalaries) btnClearSalaries.style.display = isAdmin ? '' : 'none';
 }
 
 // ========== INIT ==========
@@ -5901,6 +5906,34 @@ async function backupToGoogleSheet() {
     return;
   }
   showToast(`✅ Back Up ជោគជ័យ! User:${r.users} StaffInfo:${r.staff} Attendance:${r.attendance} CheckIn:${r.checkIns} CheckOut:${r.checkOuts}`, 'success');
+}
+
+// Admin-only bulk action: clears salary for every staff row in Cloud SQL. Destructive
+// and irreversible without a prior backup snapshot, so this asks twice — a plain
+// confirm() explaining the impact, then a typed confirmation phrase — before calling
+// the server (which also re-checks admin role, see server/routes/staff.js).
+async function clearAllStaffSalaries() {
+  if (!LhbApi.hasToken()) {
+    showToast('⚠️ ត្រូវការ Login ពិត (មិនមែន admin bypass) ដើម្បីធ្វើសកម្មភាពនេះ', 'warning');
+    return;
+  }
+  const withSalary = (appData.staff || []).filter(s => String(s.Salary || '').trim() !== '').length;
+  const warn = `⚠️ សកម្មភាពនេះនឹងលុបប្រាក់ខែចេញពីបុគ្គលិកទាំងអស់ (${withSalary} នាក់មានប្រាក់ខែបច្ចុប្បន្ន)។\n\n`
+    + `សូមប្រាកដថាបាន "Back Up to Google Sheet" រួចហើយ ព្រោះសកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ។\n\nបន្តទេ?`;
+  if (!confirm(warn)) return;
+  const typed = prompt('ដើម្បីបញ្ជាក់ សូមវាយ DELETE SALARY (ជាអក្សរធំ) ខាងក្រោម៖');
+  if (typed !== 'DELETE SALARY') { showToast('❌ បោះបង់ — អត្ថបទបញ្ជាក់មិនត្រូវគ្នា', 'warning'); return; }
+
+  showLoading(true);
+  const r = await LhbApi.clearAllSalaries();
+  showLoading(false);
+  if (!r._ok) {
+    showToast('❌ បរាជ័យ: ' + (r.msg || 'Unknown error'), 'warning');
+    return;
+  }
+  appData.staff.forEach(s => { s.Salary = ''; });
+  renderStaff();
+  showToast(`✅ បានលុបប្រាក់ខែចេញពីបុគ្គលិក ${r.cleared} នាក់!`, 'success');
 }
 
 // ========== PAGINATION ==========
