@@ -203,6 +203,11 @@
     async deleteStaff(staffCode) {
       return apiFetch('/api/staff/' + encodeURIComponent(staffCode), { method: 'DELETE' });
     },
+    // Admin-only bulk action (server-side requireAdmin, see server/routes/staff.js) —
+    // clears salary for every staff row. Irreversible without a prior backup.
+    async clearAllSalaries() {
+      return apiFetch('/api/staff/clear-salaries', { method: 'POST' });
+    },
     // No auth needed — staff self-service profile photo update (see server/routes/staff.js).
     async updateStaffPhoto(staffCode, photoUrl) {
       return apiFetch('/api/staff/' + encodeURIComponent(staffCode) + '/photo', {
