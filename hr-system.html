@@ -1662,6 +1662,7 @@ function forceSessionExpiredLogout() {
   _forcingLogout = true;
   console.warn('[Session] Token no longer valid — forcing logout');
   sessionStorage.removeItem('hrSession');
+  LhbApi.clearToken(); // drop the dead bearer token too, else hasToken() keeps reporting "logged in" after reload
   if (_heartbeatInterval) clearInterval(_heartbeatInterval);
   showToast('⚠️ Session ត្រូវបានផុតកំណត់ — សូម Login ម្ដងទៀត', 'warning');
   setTimeout(() => location.reload(), 2000);
@@ -3840,7 +3841,7 @@ async function editDept(oldName) {
     ? await LhbApi.updateDepartment(rec.id, { name: trimmed })
     : await LhbApi.createDepartment(trimmed); // implicit dept (from staff data only) — no record yet
   showLoading(false);
-  if (!r._ok) { showToast('❌ '+(r.msg||'កែមិនបានជោគជ័យ'), 'error'); return; }
+  if (!r._ok) { if (!_forcingLogout) showToast('❌ '+(r.msg||'កែមិនបានជោគជ័យ'), 'error'); return; }
   await loadDepartments();
   renderStructure();
   showToast('✅ ផ្នែក "'+oldName+'" → "'+trimmed+'" (ឈ្មោះបុគ្គលិកដែលមានស្រាប់មិនប្តូរទេ)', 'success');
@@ -3853,7 +3854,7 @@ async function deleteDept(name) {
   showLoading(true);
   const r = await LhbApi.deleteDepartment(rec.id);
   showLoading(false);
-  if (!r._ok) { showToast('❌ '+(r.msg||'លុបមិនបានជោគជ័យ'), 'error'); return; }
+  if (!r._ok) { if (!_forcingLogout) showToast('❌ '+(r.msg||'លុបមិនបានជោគជ័យ'), 'error'); return; }
   await loadDepartments();
   renderStructure();
   showToast('🗑️ លុបផ្នែក "'+name+'" ','success');
@@ -3876,7 +3877,7 @@ async function saveDept() {
   showLoading(true);
   const r = await LhbApi.createDepartment(name, headId);
   showLoading(false);
-  if (!r._ok) { showToast('❌ '+(r.msg||'បន្ថែមមិនបានជោគជ័យ'), 'error'); return; }
+  if (!r._ok) { if (!_forcingLogout) showToast('❌ '+(r.msg||'បន្ថែមមិនបានជោគជ័យ'), 'error'); return; }
   await loadDepartments();
   closeModal('deptFormModal');
   renderStructure();
@@ -3952,7 +3953,7 @@ async function saveUser() {
     ? await LhbApi.updateUser(editUsername, { ...(password ? { password } : {}), name, role, email, department, position })
     : await LhbApi.createUser({ username, password, name, role, email, department, position });
   showLoading(false);
-  if (!r._ok) { showToast('❌ '+(r.msg||'រក្សាទុកមិនបានជោគជ័យ'), 'error'); return; }
+  if (!r._ok) { if (!_forcingLogout) showToast('❌ '+(r.msg||'រក្សាទុកមិនបានជោគជ័យ'), 'error'); return; }
 
   await loadUsersList();
   closeModal('userFormModal');
@@ -3965,7 +3966,7 @@ async function deleteUserAccount(username) {
   showLoading(true);
   const r = await LhbApi.deleteUser(username);
   showLoading(false);
-  if (!r._ok) { showToast('❌ '+(r.msg||'លុបមិនបានជោគជ័យ'), 'error'); return; }
+  if (!r._ok) { if (!_forcingLogout) showToast('❌ '+(r.msg||'លុបមិនបានជោគជ័យ'), 'error'); return; }
   await loadUsersList();
   renderUsers();
   showToast('🗑️ លុបគណនីជោគជ័យ', 'success');
@@ -3990,7 +3991,7 @@ async function savePenalty(staffId, month, val) {
   const amount = Number(val) || 0;
   _penaltyCache[_penaltyKey(staffId, month)] = amount; // optimistic — UI already reflects it
   const r = await LhbApi.savePenalty(staffId, month, amount);
-  if (!r._ok) showToast('❌ ពិន័យមិនបានរក្សាទុក: ' + (r.msg||'unknown error'), 'error');
+  if (!r._ok && !_forcingLogout) showToast('❌ ពិន័យមិនបានរក្សាទុក: ' + (r.msg||'unknown error'), 'error');
 }
 function recalcRow(inputEl) {
   const row = inputEl.closest('tr');
@@ -5955,8 +5956,10 @@ async function clearAllStaffSalaries() {
   showLoading(true);
   const r = await LhbApi.clearAllSalaries();
   showLoading(false);
+  // If the failure was a dead session, forceSessionExpiredLogout() already showed its
+  // own toast and is reloading — don't overwrite it with this generic failure message.
   if (!r._ok) {
-    showToast('❌ បរាជ័យ: ' + (r.msg || 'Unknown error'), 'warning');
+    if (!_forcingLogout) showToast('❌ បរាជ័យ: ' + (r.msg || 'Unknown error'), 'warning');
     return;
   }
   appData.staff.forEach(s => { s.Salary = ''; });
