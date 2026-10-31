@@ -209,6 +209,13 @@ function doGet(e) {
 
     var sheetRaw = String(params.sheet || '').trim();
     var sheet    = (sheetRaw && sheetRaw !== 'undefined' && sheetRaw !== 'null') ? sheetRaw : 'StaffInfo';
+    var publicColumns = {
+      StaffInfo: ['ID', 'Name', 'NameLatin', 'Sex', 'LV', 'Position', 'Department', 'ProjectName', 'Photo', 'EmploymentStatus']
+    };
+    var hasPublicColumns = Object.prototype.hasOwnProperty.call(publicColumns, sheet);
+    if (!hasPublicColumns && sheet !== 'Project') {
+      return respond({ status:'error', msg:'This sheet is not available through the public endpoint.' });
+    }
 
     // ── Server-side filter params (CheckIn/CheckOut fast path) ──
     var filterId   = String(params.id   || '').trim();
@@ -216,7 +223,7 @@ function doGet(e) {
     var isFiltered = !!(filterId && filterDate);
 
     // ── Output cache check ──
-    var outKey = 'doget_' + sheet + (isFiltered ? '_' + filterId + '_' + filterDate : '');
+    var outKey = 'doget_v2_' + sheet + (isFiltered ? '_' + filterId + '_' + filterDate : '');
     var sc = CacheService.getScriptCache();
     if (!params.nocache) {
       var hit = sc.get(outKey);
@@ -234,6 +241,12 @@ function doGet(e) {
     if (vals.length < 2) return respond({ status:'ok', data:[] });
 
     var headers = vals[0].map(function(h){ return String(h).trim(); });
+    var allowedHeaders = hasPublicColumns ? publicColumns[sheet] : null;
+    var outputColumns = headers.map(function(header, index) {
+      return { header: header, index: index };
+    }).filter(function(column) {
+      return !allowedHeaders || allowedHeaders.indexOf(column.header) !== -1;
+    });
 
     // Pre-compute column indices for filter (avoid indexOf per row)
     var idColIdx   = isFiltered ? headers.indexOf('ID')   : -1;
@@ -254,8 +267,9 @@ function doGet(e) {
       }
 
       var obj = {};
-      headers.forEach(function(h, j) {
-        var v = row[j];
+      outputColumns.forEach(function(column) {
+        var h = column.header;
+        var v = row[column.index];
         if (v instanceof Date) {
           // Time-only: 1899-12-30 → format as HH:mm (fast, no API call)
           if (v.getFullYear() === 1899 && v.getMonth() === 11 && v.getDate() === 30) {
@@ -301,6 +315,10 @@ function doPost(e) {
     var p = parsed;
     if (!p) return respond({ status:'error', msg:'Invalid JSON' });
     Logger.log('doPost action: ' + p.action);
+
+    if (p.action === 'authLogin') return authLogin_(p);
+    if (p.action === 'authSession') return authSession_(p);
+    if (p.action === 'authLogout') return authLogout_(p);
 
     // ── append ──
     if (p.action === 'append') {
@@ -392,6 +410,182 @@ function doPost(e) {
   } catch(err) {
     Logger.log('doPost ERROR: '+err.message);
     return respond({ status:'error', msg:err.message });
+  }
+}
+
+function authHeaders_(sheet) {
+  var lastColumn = sheet.getLastColumn();
+  var headers = lastColumn
+    ? sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(function(value) {
+        return String(value || '').trim();
+      })
+    : [];
+  ['SessionToken', 'SessionTime'].forEach(function(name) {
+    if (headers.indexOf(name) < 0) {
+      lastColumn++;
+      sheet.getRange(1, lastColumn).setValue(name);
+      headers.push(name);
+    }
+  });
+  return headers;
+}
+
+function authTokenHash_(token) {
+  var digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    token,
+    Utilities.Charset.UTF_8
+  );
+  return Utilities.base64EncodeWebSafe(digest);
+}
+
+function authUser_(headers, row) {
+  var fields = ['Username', 'Name', 'Role', 'Email', 'Department', 'Position'];
+  var user = {};
+  fields.forEach(function(field) {
+    var index = headers.indexOf(field);
+    user[field.toLowerCase()] = index >= 0 ? String(row[index] || '') : '';
+  });
+  return user;
+}
+
+function authRateLimit_(username, recordFailure) {
+  var cache = CacheService.getScriptCache();
+  var key = 'auth_fail_' + authTokenHash_(username.toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 40);
+  var attempts = Number(cache.get(key) || 0);
+  if (attempts >= 10) return false;
+  if (recordFailure) cache.put(key, String(attempts + 1), 900);
+  return true;
+}
+
+function authLogin_(request) {
+  var username = String(request.username || '').trim();
+  var password = String(request.password || '');
+  if (!username || !password) return respond({ status: 'error', code: 'INVALID_CREDENTIALS', msg: 'Username and password required' });
+  if (!authRateLimit_(username, false)) {
+    return respond({ status: 'error', code: 'RATE_LIMITED', msg: 'Too many login attempts. Please try again later.' });
+  }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) {
+    return respond({ status: 'error', code: 'TRY_AGAIN', msg: 'Login is busy. Please try again.' });
+  }
+  try {
+    var sheet = getSS().getSheetByName('User');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return respond({ status: 'error', code: 'AUTH_UNAVAILABLE', msg: 'User accounts are unavailable.' });
+    }
+    var headers = authHeaders_(sheet);
+    var usernameIndex = headers.indexOf('Username');
+    var passwordIndex = headers.indexOf('Password');
+    var tokenIndex = headers.indexOf('SessionToken');
+    var timeIndex = headers.indexOf('SessionTime');
+    if (usernameIndex < 0 || passwordIndex < 0) {
+      return respond({ status: 'error', code: 'AUTH_UNAVAILABLE', msg: 'User sheet is missing login columns.' });
+    }
+
+    var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues();
+    var rowIndex = -1;
+    for (var i = 0; i < rows.length; i++) {
+      if (String(rows[i][usernameIndex] || '').trim().toLowerCase() === username.toLowerCase() &&
+          String(rows[i][passwordIndex] || '') === password) {
+        rowIndex = i;
+        break;
+      }
+    }
+    if (rowIndex < 0) {
+      authRateLimit_(username, true);
+      return respond({ status: 'error', code: 'INVALID_CREDENTIALS', msg: 'Invalid username or password.' });
+    }
+
+    var row = rows[rowIndex];
+    var previousTime = timeIndex >= 0 ? new Date(row[timeIndex]).getTime() : 0;
+    var hasActiveSession = tokenIndex >= 0 && row[tokenIndex] &&
+      Number.isFinite(previousTime) && Date.now() - previousTime < 10 * 60 * 1000;
+    if (hasActiveSession) {
+      return respond({
+        status: 'error',
+        code: 'CONCURRENT_SESSION',
+        msg: 'This user is already logged in on another device.',
+        since: row[timeIndex]
+      });
+    }
+
+    var token = Utilities.getUuid() + Utilities.getUuid();
+    var sheetRow = rowIndex + 2;
+    sheet.getRange(sheetRow, tokenIndex + 1).setValue(authTokenHash_(token));
+    sheet.getRange(sheetRow, timeIndex + 1).setValue(new Date());
+    var rateLimitKey = 'auth_fail_' + authTokenHash_(username.toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 40);
+    CacheService.getScriptCache().remove(rateLimitKey);
+    invalidateSheetCache('User');
+    return respond({ status: 'ok', token: token, user: authUser_(headers, row) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function authSession_(request) {
+  var token = String(request.token || '');
+  if (!token) return respond({ status: 'error', code: 'SESSION_INVALID', msg: 'Session expired or invalid.' });
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) {
+    return respond({ status: 'error', code: 'TRY_AGAIN', msg: 'Session check is busy. Please retry.' });
+  }
+  try {
+    var sheet = getSS().getSheetByName('User');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return respond({ status: 'error', code: 'SESSION_INVALID', msg: 'Session expired or invalid.' });
+    }
+    var headers = authHeaders_(sheet);
+    var tokenIndex = headers.indexOf('SessionToken');
+    var timeIndex = headers.indexOf('SessionTime');
+    var usernameIndex = headers.indexOf('Username');
+    var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues();
+    var tokenHash = authTokenHash_(token);
+    for (var i = 0; i < rows.length; i++) {
+      var sessionTime = new Date(rows[i][timeIndex]).getTime();
+      if (rows[i][tokenIndex] === tokenHash &&
+          Number.isFinite(sessionTime) && Date.now() - sessionTime < 10 * 60 * 1000) {
+        sheet.getRange(i + 2, timeIndex + 1).setValue(new Date());
+        var user = authUser_(headers, rows[i]);
+        user.username = String(rows[i][usernameIndex] || '');
+        return respond({ status: 'ok', user: user });
+      }
+    }
+    return respond({ status: 'error', code: 'SESSION_INVALID', msg: 'Session expired or invalid.' });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function authLogout_(request) {
+  var token = String(request.token || '');
+  if (!token) return respond({ status: 'ok' });
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) {
+    return respond({ status: 'error', code: 'TRY_AGAIN', msg: 'Logout is busy. Please retry.' });
+  }
+  try {
+    var sheet = getSS().getSheetByName('User');
+    if (!sheet || sheet.getLastRow() < 2) return respond({ status: 'ok' });
+    var headers = authHeaders_(sheet);
+    var tokenIndex = headers.indexOf('SessionToken');
+    var timeIndex = headers.indexOf('SessionTime');
+    var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues();
+    var tokenHash = authTokenHash_(token);
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i][tokenIndex] === tokenHash) {
+        sheet.getRange(i + 2, tokenIndex + 1).setValue('');
+        sheet.getRange(i + 2, timeIndex + 1).setValue('');
+        invalidateSheetCache('User');
+        break;
+      }
+    }
+    return respond({ status: 'ok' });
+  } finally {
+    lock.releaseLock();
   }
 }
 

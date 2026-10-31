@@ -1347,7 +1347,7 @@ tbody tr:last-child td{border-bottom:none;}
 // Only used now for Google Drive photo upload/replace calls (onStaffPhoto, the QR/
 // standalone-scan-page generator) — every sheet read/write goes through Cloud Run
 // (assets/api-client.js) instead.
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxdUb5ViHMtyZCyzZ53Z4HGXaG_2PO9CeUisdKVwje-JxEPddrr5TnAMwX5iqASHkMh/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxYikibqRogd8njRdPEWBgEy2uG0zQcIEwt9zq0VGZuMkbJiAF0bYsICr72tOIoPHGV/exec';
 
 // Sheet names
 const SHEETS = {
@@ -1514,6 +1514,25 @@ async function fetchWithTimeout(url, options, ms) {
   }
 }
 
+async function appsScriptAuth(action, data) {
+  const response = await fetchWithTimeout(APPS_SCRIPT_URL, {
+    method: 'POST',
+    mode: 'cors',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, ...data })
+  }, 15000);
+  const text = await response.text();
+  let result;
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch(e) {
+    throw new Error('Apps Script returned an invalid response.');
+  }
+  if (!response.ok) throw new Error(result.msg || 'Apps Script request failed.');
+  return result;
+}
+
 async function doLogin() {
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value.trim();
@@ -1539,32 +1558,37 @@ async function doLoginInner(u, p, lBtn, resetBtn) {
   document.getElementById('loginError').style.display = 'none';
   lBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> កំពុង ចូល...';
 
-  // ── Cloud Run auth (Phase 2) — login + concurrent-session check happen
-  // atomically server-side now, instead of the old two-step checkSession+setSession. ──
-  const apiResult = await LhbApi.login(u, p);
-
-  let match, myToken;
-  if (apiResult._ok) {
-    match = { ...apiResult.user };
-    myToken = apiResult.token;
-  } else if (apiResult._httpStatus === 409) {
+  let authResult;
+  try {
+    authResult = await appsScriptAuth('authLogin', { username: u, password: p });
+  } catch(e) {
     resetBtn();
-    const minAgo = Math.floor((Date.now() - new Date(apiResult.since || 0).getTime()) / 60000);
-    const timeStr = minAgo < 1 ? 'ប៉ុន្មានវិនាទីមុន' : minAgo + ' នាទីមុន';
-    showLoginError('User នេះបានចូលប្រើប្រាស់រួចហើយ (' + timeStr + ')! សូម Logout ពី Device ដែលកំពុងប្រើ ឬ ទំនាក់ទំនង Admin។');
-    console.warn('[Login] Concurrent session blocked for:', u);
-    return;
-  } else if (u === 'admin' && p === '8285') {
-    // Legacy client-only fallback (kept until Phase 5 auth hardening removes it —
-    // see migration plan). No API token in this mode: server-backed features
-    // (staff CRUD, check-in/out) will 401 until a real admin login succeeds.
-    match = { username: 'admin', role: 'admin', name: 'Administrator' };
-    myToken = null;
-  } else {
-    resetBtn();
-    showLoginError('Username ឬ Password មិនត្រឹមត្រូវ!');
+    showLoginError('មិនអាចភ្ជាប់ Apps Script សម្រាប់ Login បានទេ។ សូមពិនិត្យការដាក់ឱ្យដំណើរការ Apps Script និង Internet។');
+    console.error('[Login] Apps Script authentication failed:', e);
     return;
   }
+
+  if (authResult.status !== 'ok') {
+    resetBtn();
+    if (authResult.code === 'CONCURRENT_SESSION') {
+      const minAgo = Math.floor((Date.now() - new Date(authResult.since || 0).getTime()) / 60000);
+      const timeStr = minAgo < 1 ? 'ប៉ុន្មានវិនាទីមុន' : minAgo + ' នាទីមុន';
+      showLoginError('User នេះបានចូលប្រើប្រាស់រួចហើយ (' + timeStr + ')! សូម Logout ពី Device ដែលកំពុងប្រើ ឬ ទាក់ទង Admin។');
+    } else if (authResult.code === 'RATE_LIMITED') {
+      showLoginError('បានសាក Login ច្រើនដងពេក — សូមរង់ចាំ 15 នាទី រួចសាកម្ដងទៀត។');
+    } else if (authResult.code === 'AUTH_UNAVAILABLE') {
+      showLoginError('Apps Script មិនទាន់រៀបចំ User sheet សម្រាប់ Login ទេ។ សូមទាក់ទង Admin។');
+    } else if (String(authResult.msg || '').includes('Unknown action')) {
+      showLoginError('ត្រូវការ Update/Deploy Code.gs នៅ Apps Script មុនពេល Login។ សូមទាក់ទង Admin។');
+    } else {
+      showLoginError(authResult.msg || 'Username ឬ Password មិនត្រឹមត្រូវ!');
+    }
+    return;
+  }
+
+  const match = { ...authResult.user };
+  const myToken = authResult.token;
+  LhbApi.clearToken();
 
   // Normalize
   match.username = match.username || u;
@@ -1576,7 +1600,7 @@ async function doLoginInner(u, p, lBtn, resetBtn) {
   localStorage.setItem('hrDeviceFp_' + u.toLowerCase(), fp);
 
   // ── Build and store session ──
-  currentUser = { ...match, deviceFp: fp, sessionToken: myToken };
+  currentUser = { ...match, deviceFp: fp, sessionToken: myToken, authProvider: 'apps-script' };
   sessionStorage.setItem('hrSession', JSON.stringify(currentUser));
 
   resetBtn();
@@ -1592,7 +1616,7 @@ async function doLoginInner(u, p, lBtn, resetBtn) {
   startTimeoutWatcher();
   startSessionHeartbeat();
   registerUnloadHandler();
-  console.log('[Login] OK:', u, '| Token:', myToken);
+  console.log('[Login] OK:', u, '| Provider: Apps Script');
   // Auto re-sync after 3s to catch any data that loaded slowly
   setTimeout(() => {
     loadAllData().catch(e => console.warn('[AutoSync]', e));
@@ -1605,17 +1629,33 @@ document.getElementById('loginPass').addEventListener('keydown', e => { if (e.ke
 let _heartbeatInterval = null;
 function startSessionHeartbeat() {
   if (_heartbeatInterval) clearInterval(_heartbeatInterval);
-  // Heartbeat every 5 min — keeps SessionTime fresh
-  // If browser closes without logout, session auto-expires after 10 min (2 missed heartbeats)
   _heartbeatInterval = setInterval(async () => {
     if (!currentUser || !currentUser.sessionToken) return;
-    try { await LhbApi.getSession(); } catch(e) { console.warn('[Heartbeat] failed:', e); }
+    try {
+      if (currentUser.authProvider === 'apps-script') {
+        const result = await appsScriptAuth('authSession', { token: currentUser.sessionToken });
+        if (result.status !== 'ok') forceSessionExpiredLogout();
+      } else {
+        await LhbApi.getSession();
+      }
+    } catch(e) { console.warn('[Heartbeat] failed:', e); }
   }, 5 * 60 * 1000); // every 5 min
 }
 
 // ── Best-effort logout on tab/browser close (keepalive fetch, no response awaited) ──
 function clearSessionBeacon() {
   if (!currentUser || !currentUser.sessionToken) return;
+  if (currentUser.authProvider === 'apps-script') {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(
+        APPS_SCRIPT_URL,
+        new Blob([JSON.stringify({ action: 'authLogout', token: currentUser.sessionToken })], {
+          type: 'text/plain;charset=utf-8'
+        })
+      );
+    }
+    return;
+  }
   LhbApi.logoutBeacon();
 }
 
@@ -1673,6 +1713,11 @@ LhbApi.onSessionExpired(forceSessionExpiredLogout);
 async function revalidateSession() {
   if (!currentUser || !currentUser.sessionToken) return;
   try {
+    if (currentUser.authProvider === 'apps-script') {
+      const result = await appsScriptAuth('authSession', { token: currentUser.sessionToken });
+      if (result.status !== 'ok') forceSessionExpiredLogout();
+      return;
+    }
     const res = await LhbApi.getSession();
     // requireAuth on the server rejects revoked/expired tokens (e.g. an admin
     // reset the device, or another login took over) → force logout locally.
@@ -1682,7 +1727,10 @@ async function revalidateSession() {
 
 async function doLogout() {
   if (_heartbeatInterval) clearInterval(_heartbeatInterval);
-  if (currentUser && currentUser.sessionToken) {
+  if (currentUser && currentUser.sessionToken && currentUser.authProvider === 'apps-script') {
+    try { await appsScriptAuth('authLogout', { token: currentUser.sessionToken }); }
+    catch(e) { console.warn('[Logout] Apps Script session could not be revoked:', e); }
+  } else if (currentUser && currentUser.sessionToken) {
     try { await LhbApi.logout(); } catch(e) {}
   }
   sessionStorage.removeItem('hrSession');
@@ -5919,10 +5967,10 @@ async function syncAllData() {
 }
 
 // Pushes non-credential Cloud SQL data back into the Google Sheet as a backup snapshot.
-// Requires a real HR login; the admin/8285 client-side fallback has no API session token.
+// This action still requires a Cloud Run session, which Apps Script login does not create.
 async function backupToGoogleSheet() {
   if (!LhbApi.hasToken()) {
-    showToast('⚠️ ត្រូវការ Login ពិត (មិនមែន admin bypass) ដើម្បី Back Up', 'warning');
+    showToast('⚠️ Back Up ត្រូវការ Cloud Run API session; Apps Script Login មិនគាំទ្រមុខងារនេះទេ។', 'warning');
     return;
   }
   showLoading(true);
@@ -5942,7 +5990,7 @@ async function backupToGoogleSheet() {
 // the server (which also re-checks admin role, see server/routes/staff.js).
 async function clearAllStaffSalaries() {
   if (!LhbApi.hasToken()) {
-    showToast('⚠️ ត្រូវការ Login ពិត (មិនមែន admin bypass) ដើម្បីធ្វើសកម្មភាពនេះ', 'warning');
+    showToast('⚠️ ការលុបប្រាក់ខែត្រូវការ Cloud Run API session; Apps Script Login មិនគាំទ្រមុខងារនេះទេ។', 'warning');
     return;
   }
   const withSalary = (appData.staff || []).filter(s => String(s.Salary || '').trim() !== '').length;
