@@ -88,6 +88,21 @@ test('HR login uses Apps Script authentication instead of Cloud Run login', () =
   assert.doesNotMatch(loginBody, /u\s*===\s*['"]admin['"].*8285/);
 });
 
+test('HR data falls back to read-only public StaffInfo and Project sheets', () => {
+  const projectRoot = path.join(__dirname, '..', '..');
+  const hrPage = fs.readFileSync(path.join(projectRoot, 'hr-system.html'), 'utf8');
+  const appsScript = fs.readFileSync(path.join(projectRoot, 'Code.gs'), 'utf8');
+
+  assert.match(hrPage, /APPS_SCRIPT_READABLE_SHEETS = new Set\(\['StaffInfo', 'Project'\]\)/);
+  assert.match(hrPage, /fetchAppsScriptSheet\('StaffInfo'\)/);
+  assert.match(hrPage, /fetchAppsScriptSheet\('Project'\)/);
+  assert.match(hrPage, /if \(isAppsScriptReadOnly\(sheetName\)\)/);
+  assert.match(hrPage, /លេខទូរស័ព្ទ Gmail និងព័ត៌មានធនាគារមិនត្រូវបានទាញយកទេ/);
+
+  assert.match(appsScript, /StaffInfo: \['ID', 'Name', 'NameLatin', 'Sex', 'LV', 'Position', 'Department', 'ProjectName', 'Photo', 'EmploymentStatus'\]/);
+  assert.match(appsScript, /if \(!hasPublicColumns && sheet !== 'Project'\)/);
+});
+
 test('Apps Script login verifies sheet credentials and stores only a session token hash', () => {
   const { context, rows } = createAppsScriptContext([
     ['alice', 'correct-password', 'Alice', 'hr', 'alice@example.com', 'HR', 'Officer', '', ''],

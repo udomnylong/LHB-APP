@@ -28,6 +28,8 @@ For an existing database, run `npm run db:hash-passwords` once after applying th
 
 Republish `Code.gs` in Apps Script before publishing `hr-system.html`; HR login now verifies the User sheet through Apps Script and does not require Cloud Run. Publish the updated HTML/JavaScript files after the Apps Script deployment is ready. HR data operations that use Cloud SQL still require the Cloud Run API.
 
+When Cloud Run is unavailable, the HR page can read the public `StaffInfo` directory fields and `Project` list directly from Apps Script. This fallback is read-only; sensitive staff fields (salary, phone, email, and bank details) are excluded from the public StaffInfo response, and all writes still require Cloud Run.
+
 ## Run the API
 
 ```

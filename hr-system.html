@@ -269,6 +269,7 @@ tbody tr:last-child td{border-bottom:none;}
         <span style="font-size:30px;font-weight:800;color:#f59e0b;letter-spacing:3px;font-family:'Outfit',sans-serif;text-shadow:0 1px 4px rgba(0,0,0,.3);">LHB</span>
       </div>
     </div>
+    <div id="dataSourceNotice" role="status" style="display:none;margin:12px 18px 0;padding:10px 14px;border:1px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#92400e;font-size:13px;"></div>
     <h2>HR Management System</h2>
     <p>ប្រព័ន្ធគ្រប់គ្រងធនធានមនុស្ស</p>
     <div class="form-group">
@@ -327,7 +328,7 @@ tbody tr:last-child td{border-bottom:none;}
       <div class="nav-item" id="navUsers" data-page="users" data-perm="manage" onclick="showPage('users')" style="display:none;"><i class="fas fa-user-shield"></i>គណនីអ្នកប្រើប្រាស់</div>
     </nav>
     <div class="sidebar-footer">
-      <div class="sync-indicator"><div class="dot"></div>ភ្ជាប់ Google Sheet</div>
+      <div class="sync-indicator"><div class="dot"></div><span id="dataSourceStatus">ភ្ជាប់ Google Sheet</span></div>
       <button class="btn-logout" onclick="doLogout()" style="margin-top:10px;"><i class="fas fa-sign-out-alt"></i>ចេញពីប្រព័ន្ធ</button>
       <div id="adminDeviceTools" style="display:none;margin-top:6px;">
         <button onclick="showResetDeviceDialog()" style="width:100%;padding:7px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-family:var(--font-km);font-size:12px;cursor:pointer;">
@@ -398,7 +399,7 @@ tbody tr:last-child td{border-bottom:none;}
               <option value="បានឈប់">🔴 បានឈប់</option>
               <option value="បានព្យួរ">🟡 បានព្យួរ</option>
             </select>
-            <button class="btn btn-success btn-sm" onclick="openAddStaff()"><i class="fas fa-plus"></i>បន្ថែមបុគ្គលិក</button>
+            <button id="btnAddStaff" class="btn btn-success btn-sm" onclick="openAddStaff()"><i class="fas fa-plus"></i>បន្ថែមបុគ្គលិក</button>
             <button class="btn btn-primary btn-sm" onclick="printStaff()"><i class="fas fa-print"></i>Print</button>
             <button class="btn btn-outline btn-sm" onclick="exportStaffCSV()"><i class="fas fa-file-excel"></i>Export</button>
             <button class="btn btn-danger btn-sm" id="btnClearSalaries" style="display:none;" onclick="clearAllStaffSalaries()" title="សម្អាតប្រាក់ខែគ្រប់បុគ្គលិកទាំងអស់"><i class="fas fa-eraser"></i>លុបប្រាក់ខែទាំងអស់</button>
@@ -704,7 +705,7 @@ tbody tr:last-child td{border-bottom:none;}
         <div class="card-header">
           <h3><i class="fas fa-project-diagram" style="color:var(--primary);margin-right:8px;"></i>គម្រោង</h3>
           <div class="toolbar">
-            <button class="btn btn-success btn-sm" onclick="openAddProject()"><i class="fas fa-plus"></i>បន្ថែមគម្រោង</button>
+            <button id="btnAddProject" class="btn btn-success btn-sm" onclick="openAddProject()"><i class="fas fa-plus"></i>បន្ថែមគម្រោង</button>
             <button class="btn btn-warning btn-sm" onclick="openQRModal()"><i class="fas fa-qrcode"></i>Generate QR</button>
           </div>
         </div>
@@ -1344,10 +1345,10 @@ tbody tr:last-child td{border-bottom:none;}
 <script src="assets/api-client.js"></script>
 <script>
 // ========== CONFIG ==========
-// Only used now for Google Drive photo upload/replace calls (onStaffPhoto, the QR/
-// standalone-scan-page generator) — every sheet read/write goes through Cloud Run
-// (assets/api-client.js) instead.
+// Used for HR authentication, photo operations, and a read-only data fallback for
+// the public StaffInfo directory and Project list when Cloud Run is unavailable.
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxYikibqRogd8njRdPEWBgEy2uG0zQcIEwt9zq0VGZuMkbJiAF0bYsICr72tOIoPHGV/exec';
+const APPS_SCRIPT_READABLE_SHEETS = new Set(['StaffInfo', 'Project']);
 
 // Sheet names
 const SHEETS = {
@@ -1365,6 +1366,7 @@ let appData = {
   users: [], checkin: [], checkout: [], food: [],
   comment: [], workplace: [], evaluate: []
 };
+const sheetDataSource = { StaffInfo: null, Project: null };
 let editingStaffId = null;
 let currentPage = { staff: 1, attendance: 1, leave: 1 };
 const PER_PAGE = 15;
@@ -1799,15 +1801,53 @@ function setCurrentDate() {
   document.getElementById('currentDate').textContent = d.toLocaleDateString('km-KH', opts);
 }
 
-// ========== DATA LOADING (Cloud Run / Postgres — see assets/api-client.js) ==========
+// ========== DATA LOADING (Cloud Run with a limited Apps Script read fallback) ==========
+
+function isAppsScriptReadOnly(sheetName) {
+  return sheetDataSource[sheetName] === 'apps-script';
+}
+
+function notifyReadOnlySheet(sheetName) {
+  showToast('⚠️ ទិន្នន័យ ' + sheetName + ' កំពុងអានពី Google Sheet តែប៉ុណ្ណោះ។ សូមរង់ចាំ Cloud Run ដំណើរការវិញ មុនកែប្រែ។', 'warning');
+}
+
+async function fetchAppsScriptSheet(sheetName) {
+  if (!APPS_SCRIPT_READABLE_SHEETS.has(sheetName)) return null;
+  try {
+    const url = APPS_SCRIPT_URL + '?sheet=' + encodeURIComponent(sheetName) + '&nocache=1';
+    const response = await fetchWithTimeout(url, {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-store'
+    }, 15000);
+    const text = await response.text();
+    let result;
+    try {
+      result = text ? JSON.parse(text) : {};
+    } catch(e) {
+      throw new Error('Apps Script returned an invalid response.');
+    }
+    if (!response.ok || result.status !== 'ok' || !Array.isArray(result.data)) {
+      throw new Error(result.msg || 'Apps Script could not read ' + sheetName + '.');
+    }
+    return result.data;
+  } catch(e) {
+    console.error('[HR] Apps Script read failed for ' + sheetName + ':', e);
+    return null;
+  }
+}
 
 async function fetchSheet(sheetName) {
-  // Phase 2: StaffInfo/User are served from Cloud Run now, not Apps Script/Sheets.
   if (sheetName === 'StaffInfo') {
     const r = await LhbApi.getStaff();
-    if (r._ok) return r.data;
+    if (r._ok) {
+      sheetDataSource.StaffInfo = 'cloud-run';
+      return r.data;
+    }
     console.warn('[HR] LhbApi.getStaff failed:', r.msg);
-    return [];
+    const data = await fetchAppsScriptSheet('StaffInfo');
+    sheetDataSource.StaffInfo = data === null ? null : 'apps-script';
+    return data;
   }
   if (sheetName === 'User') {
     const r = await LhbApi.getUsers();
@@ -1841,9 +1881,14 @@ async function fetchSheet(sheetName) {
   }
   if (sheetName === 'Project') {
     const r = await LhbApi.getProjects();
-    if (r._ok) return r.data;
+    if (r._ok) {
+      sheetDataSource.Project = 'cloud-run';
+      return r.data;
+    }
     console.warn('[HR] LhbApi.getProjects failed:', r.msg);
-    return [];
+    const data = await fetchAppsScriptSheet('Project');
+    sheetDataSource.Project = data === null ? null : 'apps-script';
+    return data;
   }
   if (sheetName === 'Food') {
     const r = await LhbApi.getFood();
@@ -1875,6 +1920,10 @@ async function fetchSheet(sheetName) {
 
 async function writeToSheet(sheetName, rowData, action) {
   action = action || 'append';
+  if (isAppsScriptReadOnly(sheetName)) {
+    notifyReadOnlySheet(sheetName);
+    return false;
+  }
   if (sheetName === 'StaffInfo' && action === 'append') {
     const r = await LhbApi.createStaff(rowData);
     if (!r._ok) console.warn('[LhbApi] createStaff failed:', r.msg);
@@ -1901,6 +1950,10 @@ async function writeToSheet(sheetName, rowData, action) {
 
 // Delete from sheet by row key
 async function deleteFromSheet(sheetName, keyField, keyValue) {
+  if (isAppsScriptReadOnly(sheetName)) {
+    notifyReadOnlySheet(sheetName);
+    return false;
+  }
   if (sheetName === 'StaffInfo') {
     const r = await LhbApi.deleteStaff(keyValue);
     if (!r._ok) console.warn('[LhbApi] deleteStaff failed:', r.msg);
@@ -1929,6 +1982,10 @@ async function deleteFromSheet(sheetName, keyField, keyValue) {
 
 // Update a row in sheet
 async function updateInSheet(sheetName, keyField, keyValue, rowData, keyDate) {
+  if (isAppsScriptReadOnly(sheetName)) {
+    notifyReadOnlySheet(sheetName);
+    return false;
+  }
   if (sheetName === 'StaffInfo') {
     const r = await LhbApi.updateStaff(keyValue, rowData);
     if (!r._ok) console.warn('[LhbApi] updateStaff failed:', r.msg);
@@ -1959,7 +2016,8 @@ async function updateInSheet(sheetName, keyField, keyValue, rowData, keyDate) {
 async function loadAllData() {
   showLoading(true);
   try {
-    // Load all sheets in parallel via Apps Script doGet
+    // Load primary resources via Cloud Run, with a read-only Apps Script fallback
+    // for the public StaffInfo directory and Project list only.
     const [staffData, attData, leaveData, projectData, otData, usersData, ciData, coData, foodData, commentData, workplaceData, evaluateData] = await Promise.all([
       fetchSheet(SHEETS.staff),
       fetchSheet(SHEETS.attendance),
@@ -1983,12 +2041,10 @@ async function loadAllData() {
     console.log('[HR] StaffLeave rows:', leaveData ? leaveData.length : 0);
     console.log('[HR] Project rows:', projectData ? projectData.length : 0);
 
-    // Always use sheet data if available (even empty array means sheet is empty - don't use demo)
-    let hasAnyConnection = false;
+    // null = both configured sources failed; [] = a source responded with an empty sheet.
+    const hasAnyConnection = Boolean(sheetDataSource.StaffInfo || sheetDataSource.Project);
 
-    // null = connection failed, [] = connected but empty, [...] = has data
     if (staffData !== null && staffData !== undefined) {
-      hasAnyConnection = true;
       if (staffData.length > 0) appData.staff = staffData;
     }
     if (attData !== null && attData !== undefined && attData.length > 0) appData.attendance = attData;
@@ -2025,7 +2081,11 @@ async function loadAllData() {
 
     if (hasAnyConnection) {
       const count = Array.isArray(staffData) ? staffData.length : 0;
-      if (count === 0) {
+      const readOnlySheets = Object.keys(sheetDataSource).filter(isAppsScriptReadOnly);
+      if (readOnlySheets.length > 0) {
+        const projectCount = Array.isArray(projectData) ? projectData.length : 0;
+        showToast('✅ Google Sheet: បុគ្គលិក ' + count + ' នាក់ • គម្រោង ' + projectCount + '។ ទិន្នន័យនេះអានតែប៉ុណ្ណោះ។', 'warning');
+      } else if (count === 0) {
         showToast('✅ ភ្ជាប់ជោគជ័យ! StaffInfo នៅទទេ — សូមបន្ថែមបុគ្គលិក', 'success');
       } else {
         showToast('✅ ភ្ជាប់ជោគជ័យ! បុគ្គលិក: ' + count + ' នាក់', 'success');
@@ -2035,6 +2095,7 @@ async function loadAllData() {
       loadDemoData();
       showToast('⚠️ មិនអាចភ្ជាប់ Server — ប្រើ Demo Data', 'warning');
     }
+    updateDataSourceNotice();
     // Update nav badges after data load
     updateNavBadges();
     // Re-render comment/workplace if those pages are visible
@@ -2042,6 +2103,8 @@ async function loadAllData() {
     if (activePage) {
       if (activePage.id === 'page-comment') renderComment();
       if (activePage.id === 'page-workplace') renderWorkplace();
+      if (activePage.id === 'page-staff') renderStaff();
+      if (activePage.id === 'page-project') renderProjects();
     }
   } catch(e) {
     console.error('[HR] loadAllData error:', e);
@@ -2052,6 +2115,30 @@ async function loadAllData() {
     loadDashboard();
     showLoading(false);
   }
+}
+
+function updateDataSourceNotice() {
+  const notice = document.getElementById('dataSourceNotice');
+  const status = document.getElementById('dataSourceStatus');
+  const addStaff = document.getElementById('btnAddStaff');
+  const addProject = document.getElementById('btnAddProject');
+  const fallbackSheets = Object.keys(sheetDataSource).filter(isAppsScriptReadOnly);
+
+  if (notice) {
+    notice.style.display = fallbackSheets.length ? 'block' : 'none';
+    notice.textContent = fallbackSheets.length
+      ? 'កំពុងអាន ' + fallbackSheets.join(' និង ') + ' ពី Google Sheet ក្នុងទម្រង់ Read-only។ StaffInfo បង្ហាញតែព័ត៌មានសាធារណៈ—ប្រាក់ខែ លេខទូរស័ព្ទ Gmail និងព័ត៌មានធនាគារមិនត្រូវបានទាញយកទេ។ វត្តមាន និងទិន្នន័យផ្សេងៗ/ការកែប្រែត្រូវការ Cloud Run។'
+      : '';
+  }
+  if (status) {
+    status.textContent = fallbackSheets.length
+      ? 'Google Sheet • Read-only'
+      : (sheetDataSource.StaffInfo || sheetDataSource.Project)
+        ? 'Cloud Run API'
+        : 'មិនអាចភ្ជាប់ទិន្នន័យ';
+  }
+  if (addStaff) addStaff.style.display = isAppsScriptReadOnly('StaffInfo') ? 'none' : '';
+  if (addProject) addProject.style.display = isAppsScriptReadOnly('Project') ? 'none' : '';
 }
 
 function loadDemoData() {
@@ -2316,6 +2403,7 @@ function showPage(page) {
 let staffFiltered = [];
 let _currentDetailStaffId = null; // staff currently shown in staffDetailModal (for Print Card)
 function renderStaff(data) {
+  const readOnly = isAppsScriptReadOnly('StaffInfo');
   if (data) staffFiltered = data;
   else staffFiltered = [...appData.staff];
   // Populate project filter
@@ -2343,17 +2431,19 @@ function renderStaff(data) {
       <td>${s.ProjectName||''}</td>
       <td>${formatDateDisplay(s.StartingDate)}</td>
       <td>${s.ResignDate ? formatDateDisplay(s.ResignDate) : '-'}</td>
-      <td>$${Number(s.Salary||0).toLocaleString()}</td>
-      <td>${displayPhone(s.Phone)}</td>
-      <td>${s.Gmail||''}</td>
+      <td>${readOnly ? '—' : '$' + Number(s.Salary||0).toLocaleString()}</td>
+      <td>${readOnly ? '—' : displayPhone(s.Phone)}</td>
+      <td>${readOnly ? '—' : (s.Gmail||'')}</td>
       <td>${(()=>{
         const es=s.EmploymentStatus||'កំពុងធ្វើការ';
         const cfg={'កំពុងធ្វើការ':'badge-green','បានឈប់':'badge-red','បានព្យួរ':'badge-amber'};
         return '<span class="badge '+(cfg[es]||'badge-gray')+'">'+es+'</span>';
       })()}</td>
       <td>
-        <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openAddStaff('${s.ID}')" title="កែប្រែ"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="event.stopPropagation();deleteStaff('${s.ID}')" title="លុប"><i class="fas fa-trash"></i></button>
+        ${readOnly ? '<span style="color:var(--text2);font-size:12px;">Read-only</span>' : `
+          <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openAddStaff('${s.ID}')" title="កែប្រែ"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="event.stopPropagation();deleteStaff('${s.ID}')" title="លុប"><i class="fas fa-trash"></i></button>
+        `}
       </td>
     </tr>`).join('');
   document.getElementById('staffPagInfo').textContent = `បង្ហាញ ${start+1}-${Math.min(start+PER_PAGE,total)} នៃ ${total}`;
@@ -2372,6 +2462,7 @@ function populateProjectFilter(selId, data, field) {
 }
 
 async function deleteStaff(id) {
+  if (isAppsScriptReadOnly('StaffInfo')) { notifyReadOnlySheet('StaffInfo'); return; }
   if (!confirm('តើអ្នកចង់លុបបុគ្គលិក ' + id + ' មែនទេ?')) return;
   showLoading(true);
   const ok = await deleteFromSheet(SHEETS.staff, 'ID', id);
@@ -2436,6 +2527,10 @@ function showStaffDetail(id) {
 }
 
 function openAddStaff(id) {
+  if (isAppsScriptReadOnly('StaffInfo')) {
+    notifyReadOnlySheet('StaffInfo');
+    return;
+  }
   editingStaffId = id || null;
   document.getElementById('staffFormTitle').textContent = id ? 'កែប្រែបុគ្គលិក' : 'បន្ថែមបុគ្គលិក';
   if (id) {
@@ -2484,6 +2579,7 @@ function openAddStaff(id) {
 
 let _savingStaff = false;
 async function saveStaff() {
+  if (isAppsScriptReadOnly('StaffInfo')) { notifyReadOnlySheet('StaffInfo'); return; }
   // Guard against rapid repeat clicks — showLoading()'s overlay is visual only and
   // doesn't block the button, so without this a frustrated re-click during the await
   // below fires a second full save (seen in prod logs as several PUTs per single edit).
@@ -3089,6 +3185,7 @@ async function deleteOT(idx) {
 
 // ========== PROJECT ==========
 function renderProjects() {
+  const readOnly = isAppsScriptReadOnly('Project');
   document.getElementById('projectBody').innerHTML = appData.project.map(p => `<tr>
     <td><span class="badge badge-blue">${p.ProjectID||''}</span></td>
     <td style="font-weight:600;">${p.ProjectName||''}</td>
@@ -3098,13 +3195,16 @@ function renderProjects() {
     <td>${p.Radius||''}</td>
     <td><span class="badge ${p.Status==='Active'?'badge-green':'badge-gray'}">${p.Status||''}</span></td>
     <td style="white-space:nowrap;">
-      <button class="btn btn-outline btn-sm" onclick="openEditProject('${p.ProjectID}')" title="កែប្រែ"><i class="fas fa-edit"></i></button>
-      <button class="btn btn-warning btn-sm" style="margin-left:4px;" onclick="quickGenQR('${p.ProjectName}')" title="QR Code"><i class="fas fa-qrcode"></i></button>
-      <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteProject('${p.ProjectID}')" title="លុប"><i class="fas fa-trash"></i></button>
+      ${readOnly ? '<span style="color:var(--text2);font-size:12px;">Read-only</span>' : `
+        <button class="btn btn-outline btn-sm" onclick="openEditProject('${p.ProjectID}')" title="កែប្រែ"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-warning btn-sm" style="margin-left:4px;" onclick="quickGenQR('${p.ProjectName}')" title="QR Code"><i class="fas fa-qrcode"></i></button>
+        <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteProject('${p.ProjectID}')" title="លុប"><i class="fas fa-trash"></i></button>
+      `}
     </td>
   </tr>`).join('');
 }
 async function deleteProject(id) {
+  if (isAppsScriptReadOnly('Project')) { notifyReadOnlySheet('Project'); return; }
   if (!confirm('តើអ្នកចង់លុបគម្រោង ' + id + ' មែនទេ?')) return;
   showLoading(true);
   const ok = await deleteFromSheet(SHEETS.project, 'ProjectID', id);
@@ -3117,11 +3217,16 @@ async function deleteProject(id) {
 }
 
 function openAddProject() {
+  if (isAppsScriptReadOnly('Project')) {
+    notifyReadOnlySheet('Project');
+    return;
+  }
   document.getElementById('projectFormModal').querySelectorAll('input,select').forEach(el => el.value = '');
   document.getElementById('pf_id').value = 'PRJ' + String(appData.project.length + 1).padStart(3,'0');
   openModal('projectFormModal');
 }
 function openEditProject(id) {
+  if (isAppsScriptReadOnly('Project')) { notifyReadOnlySheet('Project'); return; }
   const p = appData.project.find(x => x.ProjectID === id);
   if (!p) return;
   document.getElementById('pf_id').value = p.ProjectID;
@@ -3134,6 +3239,7 @@ function openEditProject(id) {
   openModal('projectFormModal');
 }
 async function saveProject() {
+  if (isAppsScriptReadOnly('Project')) { notifyReadOnlySheet('Project'); return; }
   const row = {
     ProjectID: document.getElementById('pf_id').value,
     ProjectName: document.getElementById('pf_name').value,
