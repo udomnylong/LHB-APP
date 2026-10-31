@@ -8,9 +8,12 @@
 (function (global) {
   const API_BASE = global.LHB_API_BASE || 'https://lhb-hr-api-860256256963.asia-southeast1.run.app';
   const TOKEN_KEY = 'lhbApiToken';
+  const STAFF_TOKEN_KEY = 'lhbStaffToken';
 
   function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
   function setToken(t) { if (t) sessionStorage.setItem(TOKEN_KEY, t); else sessionStorage.removeItem(TOKEN_KEY); }
+  function getStaffToken() { return localStorage.getItem(STAFF_TOKEN_KEY) || ''; }
+  function setStaffToken(t) { if (t) localStorage.setItem(STAFF_TOKEN_KEY, t); else localStorage.removeItem(STAFF_TOKEN_KEY); }
 
   // Host page (hr-system.html) registers this to force a re-login prompt the moment
   // any authenticated call comes back 401 — e.g. the 10-min server session expired,
@@ -21,14 +24,15 @@
 
   async function apiFetch(path, options) {
     options = options || {};
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
-    const token = getToken();
+    const { staffAuth, timeoutMs, ...fetchOptions } = options;
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, fetchOptions.headers || {});
+    const token = staffAuth ? getStaffToken() : getToken();
     if (token) headers.Authorization = 'Bearer ' + token;
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), options.timeoutMs || 15000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs || 15000);
     try {
-      const res = await fetch(API_BASE + path, { ...options, headers, signal: controller.signal });
+      const res = await fetch(API_BASE + path, { ...fetchOptions, headers, signal: controller.signal });
       const text = await res.text();
       let json;
       try { json = text ? JSON.parse(text) : {}; }
@@ -156,11 +160,39 @@
     async getSession() {
       return apiFetch('/api/auth/session', { method: 'GET' });
     },
+    async loginStaff(email, password, passwordToStore) {
+      const r = await apiFetch('/api/auth/staff-login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, passwordToStore }),
+      });
+      if (r._ok && r.token) setStaffToken(r.token);
+      if (r._ok && r.staff) r.staff = staffApiToRow(r.staff);
+      return r;
+    },
+    async logoutStaff() {
+      const r = await apiFetch('/api/auth/staff-logout', { method: 'POST', staffAuth: true });
+      setStaffToken(null);
+      return r;
+    },
+    async getMyStaffProfile() {
+      const r = await apiFetch('/api/staff/me', { method: 'GET', staffAuth: true });
+      if (r._ok && r.data) r.data = staffApiToRow(r.data);
+      return r;
+    },
+    async changeStaffPassword(oldPassword, newPassword) {
+      return apiFetch('/api/auth/staff-password', {
+        method: 'PUT',
+        staffAuth: true,
+        body: JSON.stringify({ oldPassword, newPassword }),
+      });
+    },
+    hasStaffToken() { return !!getStaffToken(); },
+    clearStaffToken() { setStaffToken(null); },
     hasToken() { return !!getToken(); },
     clearToken() { setToken(null); },
     onSessionExpired,
 
-    // ── Admin: back up Cloud SQL data for the 8 migrated resources into the Sheet ──
+    // ── Admin: back up non-credential Cloud SQL data into the Sheet ──
     async backupToSheets() {
       return apiFetch('/api/admin/backup-to-sheets', { method: 'POST', timeoutMs: 60000 });
     },
@@ -194,6 +226,16 @@
       if (r._ok && Array.isArray(r.data)) r.data = r.data.map(staffApiToRow);
       return r;
     },
+    async getStaffDirectory() {
+      const r = await apiFetch('/api/staff/directory', { method: 'GET' });
+      if (r._ok && Array.isArray(r.data)) r.data = r.data.map(staffApiToRow);
+      return r;
+    },
+    async getPublicStaffById(staffCode) {
+      const r = await apiFetch('/api/staff/public/' + encodeURIComponent(staffCode), { method: 'GET' });
+      if (r._ok && r.data) r.data = staffApiToRow(r.data);
+      return r;
+    },
     async createStaff(sheetRow) {
       return apiFetch('/api/staff', { method: 'POST', body: JSON.stringify(staffRowToApi(sheetRow)) });
     },
@@ -208,10 +250,10 @@
     async clearAllSalaries() {
       return apiFetch('/api/staff/clear-salaries', { method: 'POST' });
     },
-    // No auth needed — staff self-service profile photo update (see server/routes/staff.js).
+    // Staff session required — updates only the signed-in employee's own profile.
     async updateStaffPhoto(staffCode, photoUrl) {
       return apiFetch('/api/staff/' + encodeURIComponent(staffCode) + '/photo', {
-        method: 'PUT', body: JSON.stringify({ photoUrl }),
+        method: 'PUT', staffAuth: true, body: JSON.stringify({ photoUrl }),
       });
     },
 

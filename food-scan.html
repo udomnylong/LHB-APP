@@ -311,7 +311,7 @@ window.onload = function() {
 function loadStaff() {
   showLd(true); toast('⏳ Loading...');
   if (window.LhbApi) {
-    LhbApi.getStaff().then(function(r){
+    LhbApi.getStaffDirectory().then(function(r){
       if (r._ok && Array.isArray(r.data) && r.data.length) {
         allStaff = r.data;
         buildProjs();
@@ -319,52 +319,12 @@ function loadStaff() {
         toast('✅ Load ' + allStaff.length + ' នាក់');
         showLd(false);
       } else {
-        loadStaffViaGviz();
+        loadViaAppsScript();
       }
-    }).catch(function(){ loadStaffViaGviz(); });
+    }).catch(function(){ loadViaAppsScript(); });
   } else {
-    loadStaffViaGviz();
-  }
-}
-
-// ============================================================
-// LOAD STAFF (JSONP — no CORS needed) — fallback path
-// ============================================================
-function loadStaffViaGviz() {
-  showLd(true); toast('⏳ Loading...');
-  var cb  = 'fscb'+Date.now();
-  var url = 'https://docs.google.com/spreadsheets/d/'+SHEET_ID+
-            '/gviz/tq?tqx=out:json&sheet=StaffInfo&callback='+cb;
-  var tid = setTimeout(function(){
-    delete window[cb];
-    // Fallback: try Apps Script
     loadViaAppsScript();
-  },8000);
-
-  window[cb] = function(data){
-    clearTimeout(tid); delete window[cb];
-    try{
-      // gviz columns: use label first, then id, then column letter
-      var cols=data.table.cols.map(function(c,i){
-        return (c.label&&c.label.trim())?c.label.trim():((c.id&&c.id.trim())?c.id.trim():'col'+i);
-      });
-      console.log('[JSONP] cols:', cols.join(','));
-      allStaff=data.table.rows.map(function(row){
-        var o={};
-        cols.forEach(function(c,i){o[c]=(row.c&&row.c[i]&&row.c[i].v!=null)?String(row.c[i].v):'';});
-        return o;
-      }).filter(function(s){return s.ID||s.Name;});
-      buildProjs();
-    autoFillStaffFromPortal();
-      console.log('[JSONP] allStaff[0]:', JSON.stringify(allStaff[0]));
-      toast('✅ Load '+allStaff.length+' នាក់');
-    }catch(e){loadViaAppsScript();}
-    showLd(false);
-  };
-  var sc=document.createElement('script');
-  sc.src=url;
-  sc.onerror=function(){clearTimeout(tid);delete window[cb];loadViaAppsScript();};
-  document.head.appendChild(sc);
+  }
 }
 
 function loadViaAppsScript(){

@@ -5918,9 +5918,8 @@ async function syncAllData() {
   await loadAllData();
 }
 
-// Pushes current Cloud SQL data (User, StaffInfo, CheckIn, CheckOut, Attendance) back
-// into the Google Sheet as a backup snapshot — requires a real HR login (not the
-// admin/8285 client-side fallback, which has no session token to authenticate with).
+// Pushes non-credential Cloud SQL data back into the Google Sheet as a backup snapshot.
+// Requires a real HR login; the admin/8285 client-side fallback has no API session token.
 async function backupToGoogleSheet() {
   if (!LhbApi.hasToken()) {
     showToast('⚠️ ត្រូវការ Login ពិត (មិនមែន admin bypass) ដើម្បី Back Up', 'warning');

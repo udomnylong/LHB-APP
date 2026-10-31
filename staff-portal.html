@@ -468,7 +468,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
     <!-- Remember me -->
     <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
       <input type="checkbox" id="rememberMe" style="width:16px;height:16px;accent-color:#3b82f6;cursor:pointer;" checked>
-      <label for="rememberMe" style="font-size:12px;color:var(--text2);cursor:pointer;">ចងចាំ Gmail និង Password</label>
+      <label for="rememberMe" style="font-size:12px;color:var(--text2);cursor:pointer;">ចងចាំ Gmail</label>
     </div>
   </div>
   <!-- PWA Install Banner (Android) -->
@@ -989,46 +989,31 @@ async function doLogin() {
   btn.innerHTML = '<i class="fas fa-spinner spin"></i> កំពុង Login...';
 
   try {
-    // Phase 2: StaffInfo now comes from Cloud Run/Cloud SQL, not Apps Script/Sheets.
-    let j = null;
-    try {
-      j = await LhbApi.getStaff();
-      if (!j._ok) { showLoginErr('Data Load Failed — ' + (j.msg || 'ពិនិត្យ Internet')); return; }
-    } catch(fe) {
-      const msg = fe.name === 'AbortError' ? 'Timeout — Server មិនឆ្លើយតប (20s)' : 'Network Error — ' + fe.message;
-      showLoginErr(msg); return;
+    let result = await LhbApi.loginStaff(email, pass);
+    const savedStaff = localStorage.getItem('sp_session');
+    const cachedStaff = savedStaff ? JSON.parse(savedStaff) : null;
+    const customPassword = localStorage.getItem('pwd_' + email);
+    const hasLegacyCustomPassword = customPassword && customPassword === pass && cachedStaff &&
+      String(cachedStaff.Gmail || '').toLowerCase() === email && cachedStaff.Phone;
+    if (!result._ok && hasLegacyCustomPassword) {
+      result = await LhbApi.loginStaff(
+        email,
+        String(cachedStaff.Phone).replace(/[^0-9]/g, ''),
+        pass
+      );
     }
 
-    if (!j || !j.data || !j.data.length) {
-      showLoginErr('Data Load Failed — ពិនិត្យ Internet'); return;
+    if (!result._ok || !result.staff) {
+      if (result.code === 'STAFF_DISABLED') {
+        showLoginErr('គណនីត្រូវបានបិទ ឬព្យួរ — សូមទាក់ទង Admin');
+      } else if (result._httpStatus === 0) {
+        showLoginErr('Network Error — ពិនិត្យ Internet');
+      } else {
+        showLoginErr(result.msg || 'Gmail ឬ Password មិនត្រឹមត្រូវ');
+      }
+      return;
     }
-
-    // Match staff — flexible phone matching
-    const staff = j.data.find(s => {
-      const sGmail = (s.Gmail||'').toLowerCase().trim().replace(/[^a-z0-9@._+-]/g,'');
-      if (sGmail !== email) return false;
-
-      // Check custom password first
-      const customPwd = localStorage.getItem('pwd_' + sGmail);
-      if (customPwd) return customPwd === pass;
-
-      // Match phone: strip everything, compare last 8-9 digits
-      const sPhone  = (s.Phone||'').replace(/[^0-9]/g,'');
-      const sPhone9 = sPhone.slice(-9);
-      const pass9   = pass.slice(-9);
-      const pass8   = pass.slice(-8);
-
-      return sPhone === pass ||
-             sPhone.slice(-9) === pass9 ||
-             sPhone.slice(-8) === pass8 ||
-             (pass.startsWith('0') && sPhone === pass) ||
-             (!pass.startsWith('0') && sPhone === '0' + pass);
-    });
-
-    if (!staff) {
-      console.log('[Login] email tried:', email, 'pass digits:', pass, 'pass len:', pass.length);
-      showLoginErr('Gmail ឬ Password មិនត្រឹមត្រូវ'); return;
-    }
+    const staff = result.staff;
 
     // ── Check EmploymentStatus ──
     const empStatus = (staff.EmploymentStatus || '').trim();
@@ -1042,12 +1027,13 @@ async function doLogin() {
     // ── Save session permanently (clear only on explicit logout) ──
     currentStaff = staff;
     localStorage.setItem('sp_session', JSON.stringify(staff));
-    localStorage.setItem('sp_cred', btoa(JSON.stringify({ email, pass })));
+    localStorage.removeItem('sp_cred');
+    localStorage.removeItem('pwd_' + email);
 
     // Remember Me checkbox
     const remCb = document.getElementById('rememberMe');
     if (remCb && remCb.checked) {
-      localStorage.setItem('sp_remember', JSON.stringify({ email, pass }));
+      localStorage.setItem('sp_remember', JSON.stringify({ email }));
     } else {
       localStorage.removeItem('sp_remember');
     }
@@ -1083,16 +1069,18 @@ function togglePassword() {
   }
 }
 
-// Load remembered credentials
+// Remember the account name only; passwords are never saved in browser storage.
 (function loadRemembered() {
   try {
     const saved = localStorage.getItem('sp_remember');
     if (saved) {
-      const { email, pass } = JSON.parse(saved);
-      if (email) document.getElementById('lgEmail').value = email;
-      if (pass)  document.getElementById('lgPass').value  = pass;
+      const remembered = JSON.parse(saved);
+      if (remembered.email) document.getElementById('lgEmail').value = remembered.email;
       const cb = document.getElementById('rememberMe');
       if (cb) cb.checked = true;
+      if (remembered.pass) {
+        localStorage.setItem('sp_remember', JSON.stringify({ email: remembered.email }));
+      }
     }
   } catch(e) {}
 })();
@@ -2104,17 +2092,20 @@ document.getElementById('btnComment').onclick  = () => submitReport('Comment','c
 // ════════════════════════════════════════════════
 // CHANGE PASSWORD
 // ════════════════════════════════════════════════
-function changePwd() {
+async function changePwd() {
   if (!currentStaff) return;
   const old = document.getElementById('pwd_old').value.replace(/[^0-9]/g,'');
   const nw  = document.getElementById('pwd_new').value.replace(/[^0-9]/g,'');
   const cf  = document.getElementById('pwd_confirm').value.replace(/[^0-9]/g,'');
-  const gmail = (currentStaff.Gmail||'').toLowerCase();
-  const storedPwd = localStorage.getItem('pwd_' + gmail) || (currentStaff.Phone||'').replace(/[^0-9]/g,'');
-  if (old !== storedPwd) { showToast('❌ Password ចាស់មិនត្រឹមត្រូវ','err'); return; }
   if (nw.length < 6) { showToast('⚠️ Password ថ្មីត្រូវការ ≥ 6 ខ្ទង់','err'); return; }
   if (nw !== cf) { showToast('⚠️ Password ថ្មីមិនដូចគ្នា','err'); return; }
-  localStorage.setItem('pwd_' + gmail, nw);
+
+  const result = await LhbApi.changeStaffPassword(old, nw);
+  if (!result._ok) {
+    showToast('❌ ' + (result.msg || 'ប្ដូរ Password មិនបានជោគជ័យ'), 'err');
+    return;
+  }
+  localStorage.removeItem('pwd_' + String(currentStaff.Gmail || '').toLowerCase());
   showToast('✅ ផ្លាស់ប្ដូរ Password ជោគជ័យ!','ok');
   closeModal('pwdModal');
   document.getElementById('pwd_old').value = '';
@@ -2401,6 +2392,8 @@ document.addEventListener('click', e => {
 
 function doLogout() {
   // Clear all session data — only called on explicit logout
+  LhbApi.logoutStaff();
+  LhbApi.clearStaffToken();
   localStorage.removeItem('sp_session');
   localStorage.removeItem('sp_cred');
   sessionStorage.removeItem('portal_staff');
@@ -2475,8 +2468,12 @@ function showToast(msg, type) {
         if (cachedStatus === 'បានឈប់' || cachedStatus === 'បានព្យួរ') {
           localStorage.removeItem('sp_session');
           localStorage.removeItem('sp_cred');
-        } else {
+          LhbApi.clearStaffToken();
+        } else if (LhbApi.hasStaffToken()) {
           _bootStaff = parsed;
+        } else {
+          localStorage.removeItem('sp_session');
+          localStorage.removeItem('sp_cred');
         }
       } else {
         localStorage.removeItem('sp_session');
@@ -2494,29 +2491,19 @@ function showToast(msg, type) {
     // a just-applied suspension/resignation).
     setTimeout(async () => {
       try {
-        const cred = localStorage.getItem('sp_cred');
-        if (!cred) return;
-        const { email } = JSON.parse(atob(cred));
-        if (!email) return;
-        const r = await LhbApi.getStaff();
-        if (!r._ok || !r.data) return;
-        const fresh = r.data.find(s =>
-          (s.Gmail||'').toLowerCase().trim() === email.toLowerCase().trim()
-        );
-        if (fresh) {
-          const freshStatus = (fresh.EmploymentStatus || '').trim();
-          if (freshStatus === 'បានឈប់' || freshStatus === 'បានព្យួរ') {
-            console.warn('[Session] Account blocked — forcing logout');
-            localStorage.removeItem('sp_session');
-            localStorage.removeItem('sp_cred');
-            sessionStorage.clear();
-            currentStaff = null;
-            location.reload();
-            return;
-          }
-          currentStaff = fresh;
-          localStorage.setItem('sp_session', JSON.stringify(fresh));
-          console.log('[Session] Staff data refreshed silently');
+        const r = await LhbApi.getMyStaffProfile();
+        if (r._httpStatus === 401 || r._httpStatus === 403) {
+          console.warn('[Session] Staff session is no longer valid');
+          LhbApi.clearStaffToken();
+          localStorage.removeItem('sp_session');
+          currentStaff = null;
+          location.reload();
+          return;
+        }
+        if (r._ok && r.data) {
+          currentStaff = r.data;
+          localStorage.setItem('sp_session', JSON.stringify(r.data));
+          console.log('[Session] Staff profile refreshed');
         }
       } catch(e) { console.warn('[Session] Background refresh failed:', e); }
     }, 3000);

@@ -68,13 +68,13 @@ function formatDateDisplay(v) {
     return;
   }
 
-  const r = await LhbApi.getStaff().catch(() => ({ _ok: false }));
+  const r = await LhbApi.getPublicStaffById(id).catch(() => ({ _ok: false }));
   if (!r._ok) {
     content.innerHTML = '<div class="state"><i class="fas fa-wifi"></i>មិនអាចភ្ជាប់ Server បាន — សូមព្យាយាមម្តងទៀត</div>';
     return;
   }
 
-  const s = (r.data || []).find(x => String(x.ID || '').trim() === id);
+  const s = r.data;
   if (!s) {
     content.innerHTML = '<div class="state"><i class="fas fa-user-slash"></i>រកមិនឃើញបុគ្គលិកឈ្មោះ ID នេះ — កាតមិនត្រឹមត្រូវ</div>';
     return;
