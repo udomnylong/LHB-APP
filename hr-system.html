@@ -1471,6 +1471,14 @@ function checkSession() {
   if (s) {
     try {
       currentUser = JSON.parse(s);
+      // A page refresh fires the unload logout beacon, which revokes and clears the
+      // Cloud Run token. Restoring the UI without it would silently drop into the
+      // read-only Sheet fallback, so ask for a fresh login instead.
+      if (currentUser.authProvider !== 'apps-script' && !LhbApi.hasToken()) {
+        sessionStorage.removeItem('hrSession');
+        currentUser = null;
+        return;
+      }
       // Verify device still matches
       const fp = getDeviceFingerprint();
       if (currentUser.deviceFp && currentUser.deviceFp !== fp) {
