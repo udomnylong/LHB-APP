@@ -1560,6 +1560,29 @@ async function doLoginInner(u, p, lBtn, resetBtn) {
   document.getElementById('loginError').style.display = 'none';
   lBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> កំពុង ចូល...';
 
+  // Cloud Run first: it issues the API token every data read/write needs. Fall back to
+  // Apps Script (read-only Sheet mode) only when Cloud Run itself is unreachable/down.
+  const apiResult = await LhbApi.login(u, p);
+  if (apiResult._ok && apiResult.token) {
+    finishLogin(u, { ...(apiResult.user || {}) }, apiResult.token, 'cloud-run', resetBtn);
+    return;
+  }
+  const apiStatus = apiResult._httpStatus || 0;
+  if (apiStatus > 0 && apiStatus < 500) {
+    resetBtn();
+    if (apiResult.code === 'CONCURRENT_SESSION') {
+      const minAgo = Math.floor((Date.now() - new Date(apiResult.since || 0).getTime()) / 60000);
+      const timeStr = minAgo < 1 ? 'ប៉ុន្មានវិនាទីមុន' : minAgo + ' នាទីមុន';
+      showLoginError('User នេះបានចូលប្រើប្រាស់រួចហើយ (' + timeStr + ')! សូម Logout ពី Device ដែលកំពុងប្រើ ឬ ទាក់ទង Admin។');
+    } else if (apiStatus === 429) {
+      showLoginError('បានសាក Login ច្រើនដងពេក — សូមរង់ចាំ 15 នាទី រួចសាកម្ដងទៀត។');
+    } else {
+      showLoginError('Username ឬ Password មិនត្រឹមត្រូវ!');
+    }
+    return;
+  }
+  console.warn('[Login] Cloud Run unavailable, falling back to Apps Script:', apiResult.msg);
+
   let authResult;
   try {
     authResult = await appsScriptAuth('authLogin', { username: u, password: p });
@@ -1588,10 +1611,11 @@ async function doLoginInner(u, p, lBtn, resetBtn) {
     return;
   }
 
-  const match = { ...authResult.user };
-  const myToken = authResult.token;
   LhbApi.clearToken();
+  finishLogin(u, { ...authResult.user }, authResult.token, 'apps-script', resetBtn);
+}
 
+function finishLogin(u, match, myToken, authProvider, resetBtn) {
   // Normalize
   match.username = match.username || u;
   match.role     = match.role     || 'user';
@@ -1602,7 +1626,7 @@ async function doLoginInner(u, p, lBtn, resetBtn) {
   localStorage.setItem('hrDeviceFp_' + u.toLowerCase(), fp);
 
   // ── Build and store session ──
-  currentUser = { ...match, deviceFp: fp, sessionToken: myToken, authProvider: 'apps-script' };
+  currentUser = { ...match, deviceFp: fp, sessionToken: myToken, authProvider };
   sessionStorage.setItem('hrSession', JSON.stringify(currentUser));
 
   resetBtn();
@@ -1618,7 +1642,7 @@ async function doLoginInner(u, p, lBtn, resetBtn) {
   startTimeoutWatcher();
   startSessionHeartbeat();
   registerUnloadHandler();
-  console.log('[Login] OK:', u, '| Provider: Apps Script');
+  console.log('[Login] OK:', u, '| Provider:', authProvider);
   // Auto re-sync after 3s to catch any data that loaded slowly
   setTimeout(() => {
     loadAllData().catch(e => console.warn('[AutoSync]', e));
