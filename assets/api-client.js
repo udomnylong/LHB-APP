@@ -6,7 +6,7 @@
 // Override with window.LHB_API_BASE (set via a <script> tag before this file
 // loads) for local dev/testing against a different backend.
 (function (global) {
-  const API_BASE = global.LHB_API_BASE || 'https://lhb-hr-api-860256256963.asia-southeast1.run.app';
+  const API_BASE = global.LHB_API_BASE || 'https://lhb-hr-api-943278411244.asia-southeast1.run.app';
   const TOKEN_KEY = 'lhbApiToken';
   const STAFF_TOKEN_KEY = 'lhbStaffToken';
 

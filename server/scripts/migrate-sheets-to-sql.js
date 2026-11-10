@@ -15,6 +15,7 @@
 require('dotenv').config();
 const { google } = require('googleapis');
 const { Pool } = require('pg');
+const { hashPassword } = require('../passwords');
 
 const SHEET_ID = process.env.SHEET_ID;
 if (!SHEET_ID) throw new Error('SHEET_ID env var is required');
@@ -74,6 +75,18 @@ function toNumber(v) {
 }
 
 function toDateStr(v) {
+  const out = toDateStrRaw(v);
+  if (out === null) return null;
+  const year = Number(out.slice(0, 4));
+  // Reject typos such as "+020206-09" that parse to years Postgres cannot store.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(out) || year < 1900 || year > 2100) {
+    console.warn(`[etl] ignoring invalid date value ${JSON.stringify(v)}`);
+    return null;
+  }
+  return out;
+}
+
+function toDateStrRaw(v) {
   if (v === null || v === undefined || v === '') return null;
   if (typeof v === 'number') {
     const d = serialToUtcDate(v);
@@ -115,30 +128,40 @@ async function reload(client, table, columns, rows) {
   await client.query(`DELETE FROM ${table}`);
   if (rows.length === 0) return 0;
   const placeholdersPerRow = columns.length;
-  const values = [];
-  const tuples = rows.map((row, i) => {
-    const base = i * placeholdersPerRow;
-    columns.forEach((col) => values.push(row[col]));
-    return `(${columns.map((_, j) => `$${base + j + 1}`).join(', ')})`;
-  });
-  const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${tuples.join(', ')}`;
-  await client.query(sql, values);
+  // Postgres caps a single statement at 65535 bind parameters, so insert in chunks.
+  const chunkSize = Math.max(1, Math.floor(60000 / placeholdersPerRow));
+  for (let start = 0; start < rows.length; start += chunkSize) {
+    const chunk = rows.slice(start, start + chunkSize);
+    const values = [];
+    const tuples = chunk.map((row, i) => {
+      const base = i * placeholdersPerRow;
+      columns.forEach((col) => values.push(row[col]));
+      return `(${columns.map((_, j) => `$${base + j + 1}`).join(', ')})`;
+    });
+    const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${tuples.join(', ')}`;
+    await client.query(sql, values);
+  }
   return rows.length;
 }
 
 async function loadUsers(client, sheets) {
   const raw = await loadSheetRows(sheets, 'User');
-  const rows = raw.map((r) => ({
-    username: toStr(r.Username),
-    password_plain: toStr(r.Password),
-    name: toStr(r.Name),
-    role: toStr(r.Role) || 'user',
-    email: toStr(r.Email),
-    department: toStr(r.Department),
-    position: toStr(r.Position),
-  })).filter((r) => r.username);
+  const rows = [];
+  for (const r of raw) {
+    const username = toStr(r.Username);
+    if (!username) continue;
+    rows.push({
+      username,
+      password_hash: await hashPassword(toStr(r.Password)),
+      name: toStr(r.Name),
+      role: toStr(r.Role) || 'user',
+      email: toStr(r.Email),
+      department: toStr(r.Department),
+      position: toStr(r.Position),
+    });
+  }
   const inserted = await reload(client, 'users',
-    ['username', 'password_plain', 'name', 'role', 'email', 'department', 'position'], rows);
+    ['username', 'password_hash', 'name', 'role', 'email', 'department', 'position'], rows);
   return { table: 'users', inserted, skipped: raw.length - rows.length };
 }
 
